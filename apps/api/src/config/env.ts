@@ -9,12 +9,26 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32),
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  AI_PROVIDER: z.enum(["disabled", "groq"]).default("disabled"),
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().default("llama-3.3-70b-versatile"),
 });
 
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error("Invalid environment configuration:", parsed.error.flatten().fieldErrors);
+  console.error(
+    "Invalid environment configuration:",
+    parsed.error.flatten().fieldErrors,
+  );
+  process.exit(1);
+}
+
+if (
+  parsed.data.AI_PROVIDER === "groq" &&
+  !parsed.data.GROQ_API_KEY
+) {
+  console.error("GROQ_API_KEY is required when AI_PROVIDER=groq.");
   process.exit(1);
 }
 
