@@ -6,7 +6,7 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 5 — SLA engine implemented**
+**Phase 6 — AI automation implemented**
 
 The repository currently contains:
 
@@ -30,6 +30,10 @@ The repository currently contains:
 - Priority-based SLA deadlines and breach tracking
 - First-response and resolution SLA events
 - Ticket-level SLA snapshots with at-risk indicators
+- Provider-agnostic AI assistance layer
+- Ticket classification, summaries, priority suggestions, and draft responses
+- Structured AI output validation and persisted AI analysis history
+- Human-review-only AI workflow
 - Health-check API
 - Architecture and phase documentation
 - Monorepo scripts
@@ -165,7 +169,7 @@ Frontend default: `http://localhost:3000`
 4. **Phase 3:** Ticket lifecycle + assignment ✅
 5. **Phase 4:** Messages + audit logs ✅
 6. **Phase 5:** SLA engine ✅
-7. **Phase 6:** AI automation
+7. **Phase 6:** AI automation ✅
 8. **Phase 7:** Background jobs
 9. **Phase 8:** Agent/Admin dashboard
 10. **Phase 9:** Tests + API documentation
