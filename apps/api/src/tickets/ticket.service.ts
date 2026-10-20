@@ -210,6 +210,8 @@ export async function updateTicket(
       select: {
         id: true,
         status: true,
+        priority: true,
+        category: true,
         resolvedAt: true,
         closedAt: true,
       },
@@ -266,40 +268,28 @@ export async function updateTicket(
       });
     }
 
-    if (input.priority && input.priority !== updatedTicket.priority) {
-      // no-op guard retained for type flow
-    }
-
-    const original = await tx.ticket.findUniqueOrThrow({
-      where: { id: ticketId },
-      select: {
-        priority: true,
-        category: true,
-      },
-    });
-
-    if (input.priority && input.priority !== original.priority) {
+    if (input.priority && input.priority !== current.priority) {
       await tx.auditLog.create({
         data: {
           ticketId,
           actorId: actor.userId,
           action: "PRIORITY_CHANGED",
           metadata: {
-            from: original.priority,
+            from: current.priority,
             to: input.priority,
           },
         },
       });
     }
 
-    if (input.category && input.category !== original.category) {
+    if (input.category && input.category !== current.category) {
       await tx.auditLog.create({
         data: {
           ticketId,
           actorId: actor.userId,
           action: "CATEGORY_CHANGED",
           metadata: {
-            from: original.category,
+            from: current.category,
             to: input.category,
           },
         },
