@@ -4,8 +4,8 @@ import { prisma } from "../lib/prisma.js";
 import {
   AI_QUEUE_NAME,
   SLA_QUEUE_NAME,
-  redisConnection,
 } from "../jobs/queues.js";
+import { redisConnection } from "../jobs/redis.js";
 import type {
   AiAnalysisJob,
   SlaScanJob,
