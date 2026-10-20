@@ -1,17 +1,7 @@
 import crypto from "node:crypto";
-import type {
-  AIAnalysisType,
-  Prisma,
-  UserRole,
-} from "@prisma/client";
+import type { AIAnalysisType, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import {
-  classificationResultSchema,
-  draftResponseResultSchema,
-  priorityResultSchema,
-  summaryResultSchema,
-} from "./ai.schemas.js";
-import { getAiProvider } from "./provider.factory.js";
+import { enqueueAiAnalysis } from "../jobs/enqueue.js";
 
 type Actor = {
   userId: string;
@@ -24,20 +14,7 @@ function assertStaff(actor: Actor) {
   }
 }
 
-function validateResult(type: AIAnalysisType, raw: unknown) {
-  switch (type) {
-    case "CLASSIFICATION":
-      return classificationResultSchema.parse(raw);
-    case "SUMMARY":
-      return summaryResultSchema.parse(raw);
-    case "PRIORITY_SUGGESTION":
-      return priorityResultSchema.parse(raw);
-    case "DRAFT_RESPONSE":
-      return draftResponseResultSchema.parse(raw);
-  }
-}
-
-export async function runTicketAiAnalysis(
+export async function requestTicketAiAnalysis(
   actor: Actor,
   ticketId: string,
   type: AIAnalysisType,
@@ -56,9 +33,7 @@ export async function runTicketAiAnalysis(
           body: true,
           isInternal: true,
         },
-        orderBy: {
-          createdAt: "asc",
-        },
+        orderBy: { createdAt: "asc" },
       },
     },
   });
@@ -79,6 +54,26 @@ export async function runTicketAiAnalysis(
     )
     .digest("hex");
 
+  const recentEquivalent = await prisma.aIAnalysis.findFirst({
+    where: {
+      ticketId,
+      type,
+      inputHash,
+      status: {
+        in: ["PENDING", "COMPLETED"],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (recentEquivalent) {
+    return {
+      analysis: recentEquivalent,
+      queued: false,
+      deduplicated: true,
+    };
+  }
+
   const analysis = await prisma.aIAnalysis.create({
     data: {
       ticketId,
@@ -86,73 +81,33 @@ export async function runTicketAiAnalysis(
       status: "PENDING",
       inputHash,
     },
-    select: {
-      id: true,
-      ticketId: true,
-      type: true,
-      status: true,
-      createdAt: true,
-    },
   });
 
   try {
-    const provider = getAiProvider();
-    const generated = await provider.run(type, ticket);
-    const result = validateResult(type, generated.raw);
-
-    const completed = await prisma.aIAnalysis.update({
-      where: { id: analysis.id },
-      data: {
-        status: "COMPLETED",
-        provider: generated.provider,
-        model: generated.model,
-        result: result as Prisma.InputJsonValue,
-        completedAt: new Date(),
-      },
-      select: {
-        id: true,
-        ticketId: true,
-        type: true,
-        status: true,
-        provider: true,
-        model: true,
-        result: true,
-        errorMessage: true,
-        createdAt: true,
-        completedAt: true,
-      },
+    await enqueueAiAnalysis({
+      analysisId: analysis.id,
+      ticketId,
+      actorId: actor.userId,
+      type,
     });
-
-    await prisma.auditLog.create({
-      data: {
-        ticketId,
-        actorId: actor.userId,
-        action: "AI_ANALYSIS_CREATED",
-        metadata: {
-          analysisId: completed.id,
-          type,
-          provider: completed.provider,
-          model: completed.model,
-        },
-      },
-    });
-
-    return completed;
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "AI_ANALYSIS_FAILED";
-
     await prisma.aIAnalysis.update({
       where: { id: analysis.id },
       data: {
         status: "FAILED",
-        errorMessage: message.slice(0, 1000),
+        errorMessage: "QUEUE_ENQUEUE_FAILED",
         completedAt: new Date(),
       },
     });
 
     throw error;
   }
+
+  return {
+    analysis,
+    queued: true,
+    deduplicated: false,
+  };
 }
 
 export async function listTicketAiAnalyses(
