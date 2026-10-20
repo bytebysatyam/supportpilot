@@ -88,13 +88,31 @@ export async function createTicket(
     throw new Error("CUSTOMER_ONLY_OPERATION");
   }
 
-  return prisma.ticket.create({
-    data: {
-      customerId: actor.userId,
-      subject: input.subject,
-      description: input.description,
-    },
-    select: ticketDetailSelect,
+  return prisma.$transaction(async (tx) => {
+    const ticket = await tx.ticket.create({
+      data: {
+        customerId: actor.userId,
+        subject: input.subject,
+        description: input.description,
+      },
+      select: ticketDetailSelect,
+    });
+
+    await tx.auditLog.create({
+      data: {
+        ticketId: ticket.id,
+        actorId: actor.userId,
+        action: "TICKET_CREATED",
+        metadata: {
+          subject: ticket.subject,
+          priority: ticket.priority,
+          category: ticket.category,
+          status: ticket.status,
+        },
+      },
+    });
+
+    return ticket;
   });
 }
 
@@ -223,7 +241,7 @@ export async function updateTicket(
       }
     }
 
-    return tx.ticket.update({
+    const updatedTicket = await tx.ticket.update({
       where: { id: ticketId },
       data: {
         ...lifecycleData,
@@ -233,6 +251,62 @@ export async function updateTicket(
       },
       select: ticketDetailSelect,
     });
+
+    if (input.status && input.status !== current.status) {
+      await tx.auditLog.create({
+        data: {
+          ticketId,
+          actorId: actor.userId,
+          action: "STATUS_CHANGED",
+          metadata: {
+            from: current.status,
+            to: input.status,
+          },
+        },
+      });
+    }
+
+    if (input.priority && input.priority !== updatedTicket.priority) {
+      // no-op guard retained for type flow
+    }
+
+    const original = await tx.ticket.findUniqueOrThrow({
+      where: { id: ticketId },
+      select: {
+        priority: true,
+        category: true,
+      },
+    });
+
+    if (input.priority && input.priority !== original.priority) {
+      await tx.auditLog.create({
+        data: {
+          ticketId,
+          actorId: actor.userId,
+          action: "PRIORITY_CHANGED",
+          metadata: {
+            from: original.priority,
+            to: input.priority,
+          },
+        },
+      });
+    }
+
+    if (input.category && input.category !== original.category) {
+      await tx.auditLog.create({
+        data: {
+          ticketId,
+          actorId: actor.userId,
+          action: "CATEGORY_CHANGED",
+          metadata: {
+            from: original.category,
+            to: input.category,
+          },
+        },
+      });
+    }
+
+    return updatedTicket;
   });
 }
 
@@ -264,6 +338,8 @@ export async function assignTicket(
         select: ticketDetailSelect,
       });
     }
+
+    const previousAgentId = ticket.assignedAgentId;
 
     if (agentId) {
       const agent = await tx.user.findFirst({
@@ -303,11 +379,25 @@ export async function assignTicket(
       });
     }
 
-    return tx.ticket.update({
+    const updatedTicket = await tx.ticket.update({
       where: { id: ticketId },
       data: { assignedAgentId: agentId },
       select: ticketDetailSelect,
     });
+
+    await tx.auditLog.create({
+      data: {
+        ticketId,
+        actorId: actor.userId,
+        action: agentId ? "ASSIGNED" : "UNASSIGNED",
+        metadata: {
+          previousAgentId,
+          agentId,
+        },
+      },
+    });
+
+    return updatedTicket;
   });
 }
 
