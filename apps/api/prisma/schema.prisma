@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUPPORT_AGENT
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  GENERAL
+  BILLING
+  TECHNICAL
+  ACCOUNT
+  PRODUCT
+  FEATURE_REQUEST
+  OTHER
+}
+
+enum MessageAuthorType {
+  CUSTOMER
+  AGENT
+  SYSTEM
+}
+
+enum AuditAction {
+  TICKET_CREATED
+  TICKET_UPDATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  CATEGORY_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  MESSAGE_ADDED
+  AI_ANALYSIS_CREATED
+  SLA_EVENT_CREATED
+  USER_ROLE_CHANGED
+}
+
+enum AIAnalysisType {
+  CLASSIFICATION
+  SUMMARY
+  PRIORITY_SUGGESTION
+  DRAFT_RESPONSE
+}
+
+enum AIAnalysisStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum SLAEventType {
+  FIRST_RESPONSE_DUE
+  FIRST_RESPONSE_MET
+  FIRST_RESPONSE_BREACHED
+  RESOLUTION_DUE
+  RESOLUTION_MET
+  RESOLUTION_BREACHED
+}
+
+enum NotificationType {
+  TICKET_ASSIGNED
+  TICKET_UPDATED
+  NEW_MESSAGE
+  SLA_AT_RISK
+  SLA_BREACHED
+  SYSTEM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  email              String               @unique
+  passwordHash       String
+  name               String
+  role               UserRole             @default(CUSTOMER)
+  status             UserStatus           @default(ACTIVE)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  createdTickets     Ticket[]             @relation("TicketCustomer")
+  assignedTickets    Ticket[]             @relation("CurrentAssignedAgent")
+  messages           TicketMessage[]
+  assignmentsMade    TicketAssignment[]   @relation("AssignmentActor")
+  assignmentsReceived TicketAssignment[]  @relation("AssignedAgent")
+  auditLogs          AuditLog[]           @relation("AuditActor")
+  refreshTokens      RefreshToken[]
+  notifications      Notification[]
+  teamMemberships    TeamMembership[]
+
+  @@index([role])
+  @@index([status])
+}
+
+model Team {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  members     TeamMembership[]
+  tickets     Ticket[]
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model Ticket {
+  id                   String           @id @default(cuid())
+  ticketNumber         Int              @unique @default(autoincrement())
+  subject              String
+  description          String
+  status               TicketStatus     @default(OPEN)
+  priority             TicketPriority   @default(MEDIUM)
+  category             TicketCategory   @default(GENERAL)
+  customerId           String
+  assignedAgentId      String?
+  teamId               String?
+  firstResponseDueAt   DateTime?
+  firstRespondedAt     DateTime?
+  resolutionDueAt      DateTime?
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  customer             User             @relation("TicketCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  assignedAgent        User?            @relation("CurrentAssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  team                 Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  messages             TicketMessage[]
+  assignmentHistory    TicketAssignment[]
+  auditLogs            AuditLog[]
+  aiAnalyses           AIAnalysis[]
+  slaEvents            SLAEvent[]
+  notifications        Notification[]
+
+  @@index([customerId, createdAt])
+  @@index([assignedAgentId, status])
+  @@index([teamId, status])
+  @@index([status, priority])
+  @@index([firstResponseDueAt])
+  @@index([resolutionDueAt])
+}
+
+model TicketMessage {
+  id          String            @id @default(cuid())
+  ticketId    String
+  authorId    String?
+  authorType  MessageAuthorType
+  body        String
+  isInternal  Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  ticket      Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      User?             @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([authorId])
+}
+
+model TicketAssignment {
+  id              String   @id @default(cuid())
+  ticketId        String
+  agentId         String
+  assignedById    String?
+  assignedAt      DateTime @default(now())
+  unassignedAt    DateTime?
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  agent           User     @relation("AssignedAgent", fields: [agentId], references: [id], onDelete: Restrict)
+  assignedBy      User?    @relation("AssignmentActor", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, assignedAt])
+  @@index([agentId, unassignedAt])
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  ticketId    String?
+  actorId     String?
+  action      AuditAction
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  ticket      Ticket?     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor       User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+model AIAnalysis {
+  id             String            @id @default(cuid())
+  ticketId       String
+  type           AIAnalysisType
+  status         AIAnalysisStatus  @default(PENDING)
+  provider       String?
+  model          String?
+  inputHash      String?
+  result         Json?
+  errorMessage   String?
+  createdAt      DateTime          @default(now())
+  completedAt    DateTime?
+
+  ticket         Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, type, createdAt])
+  @@index([status, createdAt])
+}
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model SLAEvent {
+  id          String       @id @default(cuid())
+  ticketId    String
+  type        SLAEventType
+  dueAt       DateTime?
+  occurredAt  DateTime     @default(now())
+  metadata    Json?
+
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  userId      String
+  ticketId    String?
+  type        NotificationType
+  status      NotificationStatus  @default(UNREAD)
+  title       String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime            @default(now())
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticket      Ticket?             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([ticketId])
+}
