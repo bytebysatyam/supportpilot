@@ -6,7 +6,7 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 8 — Agent/Admin dashboard implemented**
+**Phase 9 — Tests + API documentation implemented (execution verification pending)**
 
 The repository currently contains:
 
@@ -41,6 +41,9 @@ The repository currently contains:
 - Responsive Agent/Admin operations dashboard
 - Real ticket queue, filters, assignment, timeline, SLA and AI controls
 - Public reply and internal-note composer
+- Automated validation and SLA logic tests
+- API reference and OpenAPI 3.1 contract
+- Testing strategy and verification guide
 - Health-check API
 - Architecture and phase documentation
 - Monorepo scripts
@@ -179,7 +182,7 @@ Frontend default: `http://localhost:3000`
 7. **Phase 6:** AI automation ✅
 8. **Phase 7:** Background jobs ✅
 9. **Phase 8:** Agent/Admin dashboard ✅
-10. **Phase 9:** Tests + API documentation
+10. **Phase 9:** Tests + API documentation ✅ *(execution verification pending)*
 11. **Phase 10:** Docker + CI/CD + deployment
 12. **Phase 11:** Demo assets + final recruiter documentation
 
