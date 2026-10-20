@@ -6,7 +6,7 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 9 — Tests + API documentation implemented (execution verification pending)**
+**Phase 10 — Docker + CI/CD configuration implemented (execution/deployment verification pending)**
 
 The repository currently contains:
 
@@ -44,6 +44,10 @@ The repository currently contains:
 - Automated validation and SLA logic tests
 - API reference and OpenAPI 3.1 contract
 - Testing strategy and verification guide
+- Production-oriented API/Web Dockerfiles
+- Docker Compose stack for web, API, worker, PostgreSQL and Redis
+- GitHub Actions CI for Prisma validation, typecheck, tests and builds
+- Deployment and release checklist
 - Health-check API
 - Architecture and phase documentation
 - Monorepo scripts
@@ -183,7 +187,7 @@ Frontend default: `http://localhost:3000`
 8. **Phase 7:** Background jobs ✅
 9. **Phase 8:** Agent/Admin dashboard ✅
 10. **Phase 9:** Tests + API documentation ✅ *(execution verification pending)*
-11. **Phase 10:** Docker + CI/CD + deployment
+11. **Phase 10:** Docker + CI/CD + deployment ✅ *(execution/deployment verification pending)*
 12. **Phase 11:** Demo assets + final recruiter documentation
 
 ## Author
