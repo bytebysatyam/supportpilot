@@ -6,7 +6,7 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 4 — Messages + audit logs implemented**
+**Phase 5 — SLA engine implemented**
 
 The repository currently contains:
 
@@ -27,6 +27,9 @@ The repository currently contains:
 - Public ticket replies and staff-only internal notes
 - Customer-safe message visibility
 - Transactional ticket audit events and unified timeline
+- Priority-based SLA deadlines and breach tracking
+- First-response and resolution SLA events
+- Ticket-level SLA snapshots with at-risk indicators
 - Health-check API
 - Architecture and phase documentation
 - Monorepo scripts
@@ -161,7 +164,7 @@ Frontend default: `http://localhost:3000`
 3. **Phase 2:** Authentication + RBAC ✅
 4. **Phase 3:** Ticket lifecycle + assignment ✅
 5. **Phase 4:** Messages + audit logs ✅
-6. **Phase 5:** SLA engine
+6. **Phase 5:** SLA engine ✅
 7. **Phase 6:** AI automation
 8. **Phase 7:** Background jobs
 9. **Phase 8:** Agent/Admin dashboard
