@@ -7,6 +7,7 @@ import {
   listTicketsSchema,
   updateTicketSchema,
 } from "../tickets/ticket.schemas.js";
+import { createMessageSchema } from "../tickets/message.schemas.js";
 import {
   assignTicket,
   createTicket,
@@ -15,6 +16,11 @@ import {
   listTickets,
   updateTicket,
 } from "../tickets/ticket.service.js";
+import {
+  addTicketMessage,
+  getTicketTimeline,
+  listTicketMessages,
+} from "../tickets/message.service.js";
 
 export const ticketRouter = Router();
 
@@ -45,6 +51,7 @@ function sendServiceError(res: any, error: unknown) {
     CUSTOMER_ONLY_OPERATION: { status: 403, message: "Only customers can create support tickets." },
     INVALID_ASSIGNEE: { status: 400, message: "The assignee must be an active support agent." },
     INVALID_STATUS_TRANSITION: { status: 409, message: "The requested ticket status transition is not allowed." },
+    CUSTOMERS_CANNOT_CREATE_INTERNAL_NOTES: { status: 403, message: "Customers cannot create internal notes." },
   };
 
   const known = errors[error.message];
@@ -186,6 +193,76 @@ ticketRouter.get("/:ticketId/assignments", async (req, res) => {
   try {
     return res.status(200).json(
       await getAssignmentHistory(actorFromRequest(req), parsedId.data),
+    );
+  } catch (error) {
+    return sendServiceError(res, error);
+  }
+});
+
+
+ticketRouter.post("/:ticketId/messages", async (req, res) => {
+  const parsedId = ticketIdSchema.safeParse(req.params.ticketId);
+  const parsedBody = createMessageSchema.safeParse(req.body);
+
+  if (!parsedId.success || !parsedBody.success) {
+    return res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid message request.",
+        details: parsedBody.success ? undefined : parsedBody.error.flatten().fieldErrors,
+      },
+    });
+  }
+
+  try {
+    return res.status(201).json(
+      await addTicketMessage(
+        actorFromRequest(req),
+        parsedId.data,
+        parsedBody.data,
+      ),
+    );
+  } catch (error) {
+    return sendServiceError(res, error);
+  }
+});
+
+ticketRouter.get("/:ticketId/messages", async (req, res) => {
+  const parsedId = ticketIdSchema.safeParse(req.params.ticketId);
+
+  if (!parsedId.success) {
+    return res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid ticket id.",
+      },
+    });
+  }
+
+  try {
+    return res.status(200).json(
+      await listTicketMessages(actorFromRequest(req), parsedId.data),
+    );
+  } catch (error) {
+    return sendServiceError(res, error);
+  }
+});
+
+ticketRouter.get("/:ticketId/timeline", async (req, res) => {
+  const parsedId = ticketIdSchema.safeParse(req.params.ticketId);
+
+  if (!parsedId.success) {
+    return res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid ticket id.",
+      },
+    });
+  }
+
+  try {
+    return res.status(200).json(
+      await getTicketTimeline(actorFromRequest(req), parsedId.data),
     );
   } catch (error) {
     return sendServiceError(res, error);
