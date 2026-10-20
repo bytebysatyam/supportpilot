@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { ticketRouter } from "./routes/ticket.routes.js";
 import { slaRouter } from "./routes/sla.routes.js";
+import { aiRouter } from "./routes/ai.routes.js";
 
 export const app = express();
 
@@ -23,6 +24,7 @@ app.use("/api/v1/health", healthRouter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/tickets", ticketRouter);
 app.use("/api/v1/sla", slaRouter);
+app.use("/api/v1/ai", aiRouter);
 
 app.use((_req, res) => {
   res.status(404).json({
