@@ -6,7 +6,7 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 2 — Authentication + RBAC implemented**
+**Phase 3 — Ticket lifecycle + assignment implemented**
 
 The repository currently contains:
 
@@ -20,6 +20,10 @@ The repository currently contains:
 - JWT access tokens
 - Opaque hashed refresh tokens with rotation/revocation
 - Authentication and reusable RBAC middleware
+- Customer-scoped ticket creation and access
+- Staff ticket queue with filters, search, and pagination
+- Ticket status, priority, and category management
+- Agent assignment/reassignment with assignment history
 - Health-check API
 - Architecture and phase documentation
 - Monorepo scripts
@@ -152,7 +156,7 @@ Frontend default: `http://localhost:3000`
 1. **Phase 0:** Architecture and repository foundation ✅
 2. **Phase 1:** PostgreSQL + Prisma data model ✅
 3. **Phase 2:** Authentication + RBAC ✅
-4. **Phase 3:** Ticket lifecycle + assignment
+4. **Phase 3:** Ticket lifecycle + assignment ✅
 5. **Phase 4:** Messages + audit logs
 6. **Phase 5:** SLA engine
 7. **Phase 6:** AI automation
