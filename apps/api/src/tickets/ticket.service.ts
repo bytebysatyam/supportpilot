@@ -6,6 +6,11 @@ import {
   type UserRole,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import {
+  createInitialSlaEvents,
+  recordResolutionSla,
+  slaFieldsForNewTicket,
+} from "../sla/sla.service.js";
 
 type Actor = {
   userId: string;
@@ -89,14 +94,20 @@ export async function createTicket(
   }
 
   return prisma.$transaction(async (tx) => {
+    const sla = slaFieldsForNewTicket("MEDIUM");
+
     const ticket = await tx.ticket.create({
       data: {
         customerId: actor.userId,
         subject: input.subject,
         description: input.description,
+        firstResponseDueAt: sla.firstResponseDueAt,
+        resolutionDueAt: sla.resolutionDueAt,
       },
       select: ticketDetailSelect,
     });
+
+    await createInitialSlaEvents(tx, ticket);
 
     await tx.auditLog.create({
       data: {
@@ -214,6 +225,7 @@ export async function updateTicket(
         category: true,
         resolvedAt: true,
         closedAt: true,
+        resolutionDueAt: true,
       },
     });
 
@@ -253,6 +265,19 @@ export async function updateTicket(
       },
       select: ticketDetailSelect,
     });
+
+    if (
+      input.status &&
+      input.status !== current.status &&
+      (input.status === "RESOLVED" || input.status === "CLOSED") &&
+      !current.resolvedAt &&
+      !current.closedAt
+    ) {
+      const completedAt =
+        updatedTicket.resolvedAt ?? updatedTicket.closedAt ?? new Date();
+
+      await recordResolutionSla(tx, current, completedAt);
+    }
 
     if (input.status && input.status !== current.status) {
       await tx.auditLog.create({
