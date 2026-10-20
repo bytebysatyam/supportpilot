@@ -1,5 +1,6 @@
 import type { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { recordFirstResponseSla } from "../sla/sla.service.js";
 
 type Actor = {
   userId: string;
@@ -28,6 +29,7 @@ export async function addTicketMessage(
         id: true,
         customerId: true,
         firstRespondedAt: true,
+        firstResponseDueAt: true,
       },
     });
 
@@ -67,10 +69,14 @@ export async function addTicketMessage(
       !input.isInternal &&
       !ticket.firstRespondedAt
     ) {
+      const respondedAt = new Date();
+
       await tx.ticket.update({
         where: { id: ticketId },
-        data: { firstRespondedAt: new Date() },
+        data: { firstRespondedAt: respondedAt },
       });
+
+      await recordFirstResponseSla(tx, ticket, respondedAt);
     }
 
     await tx.auditLog.create({
