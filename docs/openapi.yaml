@@ -1,0 +1,327 @@
+openapi: 3.1.0
+info:
+  title: SupportPilot API
+  version: 0.1.0
+  description: API contract for the SupportPilot customer-support platform.
+servers:
+  - url: http://localhost:4000/api/v1
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: API health check
+      responses:
+        "200":
+          description: Service is healthy
+  /auth/register:
+    post:
+      security: []
+      summary: Register a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Customer registered
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Email already exists
+  /auth/login:
+    post:
+      security: []
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+        "401":
+          description: Invalid credentials
+  /auth/refresh:
+    post:
+      security: []
+      summary: Rotate refresh token and obtain a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Tokens rotated
+        "401":
+          description: Refresh token invalid, expired, or revoked
+  /auth/logout:
+    post:
+      security: []
+      summary: Revoke refresh token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "204":
+          description: Logged out
+  /auth/me:
+    get:
+      summary: Return current user
+      responses:
+        "200":
+          description: Current user
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /tickets:
+    get:
+      summary: List tickets visible to the current user
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/TicketStatus" }
+        - in: query
+          name: priority
+          schema: { $ref: "#/components/schemas/TicketPriority" }
+        - in: query
+          name: category
+          schema: { $ref: "#/components/schemas/TicketCategory" }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated ticket list
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a customer support ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTicketRequest"
+      responses:
+        "201":
+          description: Ticket created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /tickets/{ticketId}:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      summary: Get ticket detail
+      responses:
+        "200":
+          description: Ticket detail
+        "404":
+          description: Ticket not found
+    patch:
+      summary: Update ticket lifecycle fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTicketRequest"
+      responses:
+        "200":
+          description: Ticket updated
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Invalid lifecycle transition
+  /tickets/{ticketId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      summary: List visible ticket messages
+      responses:
+        "200":
+          description: Messages
+    post:
+      summary: Add public reply or staff internal note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageRequest"
+      responses:
+        "201":
+          description: Message created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /tickets/{ticketId}/timeline:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      summary: Get filtered ticket activity timeline
+      responses:
+        "200":
+          description: Timeline
+  /tickets/{ticketId}/assignment:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    put:
+      summary: Assign or unassign a support agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId]
+              properties:
+                agentId:
+                  oneOf:
+                    - type: string
+                    - type: "null"
+      responses:
+        "200":
+          description: Assignment updated
+  /tickets/{ticketId}/assignments:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      summary: List assignment history
+      responses:
+        "200":
+          description: Assignment history
+  /sla/tickets/{ticketId}:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      summary: Get ticket SLA snapshot and events
+      responses:
+        "200":
+          description: SLA snapshot
+        "404":
+          description: Ticket not found
+  /sla/refresh-breaches:
+    post:
+      summary: Detect and persist missing overdue SLA breach events
+      responses:
+        "200":
+          description: Scan result
+  /ai/tickets/{ticketId}/analyze:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    post:
+      summary: Queue an AI analysis job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum:
+                    - CLASSIFICATION
+                    - SUMMARY
+                    - PRIORITY_SUGGESTION
+                    - DRAFT_RESPONSE
+      responses:
+        "202":
+          description: Analysis accepted for asynchronous processing
+        "503":
+          description: Queue unavailable
+  /ai/tickets/{ticketId}/analyses:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      summary: List AI analyses for a ticket
+      responses:
+        "200":
+          description: Analyses
+  /users/support-agents:
+    get:
+      summary: List active support agents
+      responses:
+        "200":
+          description: Active support-agent directory
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TicketId:
+      in: path
+      name: ticketId
+      required: true
+      schema:
+        type: string
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 128 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 32 }
+    CreateTicketRequest:
+      type: object
+      required: [subject, description]
+      properties:
+        subject: { type: string, minLength: 4, maxLength: 160 }
+        description: { type: string, minLength: 10, maxLength: 10000 }
+    UpdateTicketRequest:
+      type: object
+      properties:
+        status: { $ref: "#/components/schemas/TicketStatus" }
+        priority: { $ref: "#/components/schemas/TicketPriority" }
+        category: { $ref: "#/components/schemas/TicketCategory" }
+    CreateMessageRequest:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 10000 }
+        isInternal: { type: boolean, default: false }
+    TicketStatus:
+      type: string
+      enum: [OPEN, IN_PROGRESS, WAITING_ON_CUSTOMER, RESOLVED, CLOSED]
+    TicketPriority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, URGENT]
+    TicketCategory:
+      type: string
+      enum: [GENERAL, BILLING, TECHNICAL, ACCOUNT, PRODUCT, FEATURE_REQUEST, OTHER]
+  responses:
+    BadRequest:
+      description: Validation error
+    Unauthorized:
+      description: Authentication required or token invalid
+    Forbidden:
+      description: Authenticated user lacks permission
