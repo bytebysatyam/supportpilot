@@ -6,18 +6,22 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 0 — Foundation completed**
+**Phase 2 — Authentication + RBAC implemented**
 
 The repository currently contains:
 
 - Next.js + TypeScript frontend workspace
 - Express + TypeScript backend workspace
+- Prisma + PostgreSQL relational data model
 - Shared domain types
-- PostgreSQL development service
-- Redis development service for future background jobs
-- Environment configuration template
+- PostgreSQL and Redis development services
+- Customer registration and login
+- bcrypt password hashing
+- JWT access tokens
+- Opaque hashed refresh tokens with rotation/revocation
+- Authentication and reusable RBAC middleware
 - Health-check API
-- Architecture documentation
+- Architecture and phase documentation
 - Monorepo scripts
 
 Business features are intentionally added phase-by-phase so the repository remains easy to review and reason about.
@@ -146,8 +150,8 @@ Frontend default: `http://localhost:3000`
 ## Development Roadmap
 
 1. **Phase 0:** Architecture and repository foundation ✅
-2. **Phase 1:** PostgreSQL + Prisma data model
-3. **Phase 2:** Authentication + RBAC
+2. **Phase 1:** PostgreSQL + Prisma data model ✅
+3. **Phase 2:** Authentication + RBAC ✅
 4. **Phase 3:** Ticket lifecycle + assignment
 5. **Phase 4:** Messages + audit logs
 6. **Phase 5:** SLA engine
