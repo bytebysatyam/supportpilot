@@ -30,7 +30,6 @@ COPY packages/types/package.json packages/types/package.json
 RUN npm install --omit=dev
 
 COPY --from=build /app/apps/web/.next apps/web/.next
-COPY --from=build /app/apps/web/public apps/web/public
 
 EXPOSE 3000
 
