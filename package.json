@@ -1,0 +1,17 @@
+{
+  "name": "supportpilot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-powered customer support and ticket automation platform.",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@supportpilot/web",
+    "dev:api": "npm run dev --workspace=@supportpilot/api",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
