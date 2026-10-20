@@ -1,0 +1,305 @@
+import type {
+  Prisma,
+  TicketPriority,
+  TicketStatus,
+} from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
+import { getSlaDeadlines } from "./sla.policy.js";
+
+type Tx = Prisma.TransactionClient;
+
+type SlaState = {
+  id: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  firstResponseDueAt: Date | null;
+  firstRespondedAt: Date | null;
+  resolutionDueAt: Date | null;
+  resolvedAt: Date | null;
+  closedAt: Date | null;
+};
+
+export function slaFieldsForNewTicket(
+  priority: TicketPriority,
+  createdAt = new Date(),
+) {
+  return getSlaDeadlines(priority, createdAt);
+}
+
+export function computeSlaSnapshot(ticket: SlaState, now = new Date()) {
+  const firstResponseBreached =
+    !ticket.firstRespondedAt &&
+    !!ticket.firstResponseDueAt &&
+    now > ticket.firstResponseDueAt;
+
+  const resolutionCompleted = Boolean(ticket.resolvedAt || ticket.closedAt);
+
+  const resolutionBreached =
+    !resolutionCompleted &&
+    !!ticket.resolutionDueAt &&
+    now > ticket.resolutionDueAt;
+
+  const firstResponseAtRisk =
+    !ticket.firstRespondedAt &&
+    !!ticket.firstResponseDueAt &&
+    !firstResponseBreached &&
+    ticket.firstResponseDueAt.getTime() - now.getTime() <= 30 * 60_000;
+
+  const resolutionAtRisk =
+    !resolutionCompleted &&
+    !!ticket.resolutionDueAt &&
+    !resolutionBreached &&
+    ticket.resolutionDueAt.getTime() - now.getTime() <= 60 * 60_000;
+
+  const completionTime = ticket.resolvedAt ?? ticket.closedAt;
+
+  return {
+    firstResponse: {
+      dueAt: ticket.firstResponseDueAt,
+      respondedAt: ticket.firstRespondedAt,
+      met:
+        !!ticket.firstRespondedAt &&
+        !!ticket.firstResponseDueAt &&
+        ticket.firstRespondedAt <= ticket.firstResponseDueAt,
+      breached: firstResponseBreached,
+      atRisk: firstResponseAtRisk,
+    },
+    resolution: {
+      dueAt: ticket.resolutionDueAt,
+      resolvedAt: completionTime,
+      met:
+        !!completionTime &&
+        !!ticket.resolutionDueAt &&
+        completionTime <= ticket.resolutionDueAt,
+      breached: resolutionBreached,
+      atRisk: resolutionAtRisk,
+    },
+  };
+}
+
+async function eventExists(
+  tx: Tx,
+  ticketId: string,
+  type:
+    | "FIRST_RESPONSE_DUE"
+    | "FIRST_RESPONSE_MET"
+    | "FIRST_RESPONSE_BREACHED"
+    | "RESOLUTION_DUE"
+    | "RESOLUTION_MET"
+    | "RESOLUTION_BREACHED",
+) {
+  return tx.sLAEvent.findFirst({
+    where: { ticketId, type },
+    select: { id: true },
+  });
+}
+
+async function createEventOnce(
+  tx: Tx,
+  input: {
+    ticketId: string;
+    type:
+      | "FIRST_RESPONSE_DUE"
+      | "FIRST_RESPONSE_MET"
+      | "FIRST_RESPONSE_BREACHED"
+      | "RESOLUTION_DUE"
+      | "RESOLUTION_MET"
+      | "RESOLUTION_BREACHED";
+    dueAt?: Date | null;
+    metadata?: Prisma.InputJsonValue;
+  },
+) {
+  if (await eventExists(tx, input.ticketId, input.type)) {
+    return false;
+  }
+
+  await tx.sLAEvent.create({
+    data: {
+      ticketId: input.ticketId,
+      type: input.type,
+      dueAt: input.dueAt ?? undefined,
+      metadata: input.metadata,
+    },
+  });
+
+  await tx.auditLog.create({
+    data: {
+      ticketId: input.ticketId,
+      action: "SLA_EVENT_CREATED",
+      metadata: {
+        type: input.type,
+        dueAt: input.dueAt?.toISOString() ?? null,
+      },
+    },
+  });
+
+  return true;
+}
+
+export async function createInitialSlaEvents(
+  tx: Tx,
+  ticket: {
+    id: string;
+    firstResponseDueAt: Date | null;
+    resolutionDueAt: Date | null;
+  },
+) {
+  if (ticket.firstResponseDueAt) {
+    await createEventOnce(tx, {
+      ticketId: ticket.id,
+      type: "FIRST_RESPONSE_DUE",
+      dueAt: ticket.firstResponseDueAt,
+    });
+  }
+
+  if (ticket.resolutionDueAt) {
+    await createEventOnce(tx, {
+      ticketId: ticket.id,
+      type: "RESOLUTION_DUE",
+      dueAt: ticket.resolutionDueAt,
+    });
+  }
+}
+
+export async function recordFirstResponseSla(
+  tx: Tx,
+  ticket: { id: string; firstResponseDueAt: Date | null },
+  respondedAt: Date,
+) {
+  if (!ticket.firstResponseDueAt) return;
+
+  await createEventOnce(tx, {
+    ticketId: ticket.id,
+    type:
+      respondedAt <= ticket.firstResponseDueAt
+        ? "FIRST_RESPONSE_MET"
+        : "FIRST_RESPONSE_BREACHED",
+    dueAt: ticket.firstResponseDueAt,
+    metadata: { respondedAt: respondedAt.toISOString() },
+  });
+}
+
+export async function recordResolutionSla(
+  tx: Tx,
+  ticket: { id: string; resolutionDueAt: Date | null },
+  resolvedAt: Date,
+) {
+  if (!ticket.resolutionDueAt) return;
+
+  await createEventOnce(tx, {
+    ticketId: ticket.id,
+    type:
+      resolvedAt <= ticket.resolutionDueAt
+        ? "RESOLUTION_MET"
+        : "RESOLUTION_BREACHED",
+    dueAt: ticket.resolutionDueAt,
+    metadata: { resolvedAt: resolvedAt.toISOString() },
+  });
+}
+
+export async function refreshOpenTicketBreaches(now = new Date()) {
+  return prisma.$transaction(async (tx) => {
+    const tickets = await tx.ticket.findMany({
+      where: {
+        status: { not: "CLOSED" },
+        OR: [
+          {
+            firstRespondedAt: null,
+            firstResponseDueAt: { lt: now },
+          },
+          {
+            resolvedAt: null,
+            resolutionDueAt: { lt: now },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        firstResponseDueAt: true,
+        firstRespondedAt: true,
+        resolutionDueAt: true,
+        resolvedAt: true,
+        closedAt: true,
+      },
+    });
+
+    let eventsCreated = 0;
+
+    for (const ticket of tickets) {
+      if (
+        !ticket.firstRespondedAt &&
+        ticket.firstResponseDueAt &&
+        ticket.firstResponseDueAt < now
+      ) {
+        if (
+          await createEventOnce(tx, {
+            ticketId: ticket.id,
+            type: "FIRST_RESPONSE_BREACHED",
+            dueAt: ticket.firstResponseDueAt,
+          })
+        ) {
+          eventsCreated += 1;
+        }
+      }
+
+      if (
+        !ticket.resolvedAt &&
+        !ticket.closedAt &&
+        ticket.resolutionDueAt &&
+        ticket.resolutionDueAt < now
+      ) {
+        if (
+          await createEventOnce(tx, {
+            ticketId: ticket.id,
+            type: "RESOLUTION_BREACHED",
+            dueAt: ticket.resolutionDueAt,
+          })
+        ) {
+          eventsCreated += 1;
+        }
+      }
+    }
+
+    return {
+      checkedAt: now,
+      ticketsChecked: tickets.length,
+      eventsCreated,
+    };
+  });
+}
+
+export async function getTicketSla(ticketId: string) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: {
+      id: true,
+      priority: true,
+      status: true,
+      firstResponseDueAt: true,
+      firstRespondedAt: true,
+      resolutionDueAt: true,
+      resolvedAt: true,
+      closedAt: true,
+      slaEvents: {
+        select: {
+          id: true,
+          type: true,
+          dueAt: true,
+          occurredAt: true,
+          metadata: true,
+        },
+        orderBy: { occurredAt: "asc" },
+      },
+    },
+  });
+
+  if (!ticket) throw new Error("TICKET_NOT_FOUND");
+
+  return {
+    ticketId: ticket.id,
+    priority: ticket.priority,
+    status: ticket.status,
+    ...computeSlaSnapshot(ticket),
+    events: ticket.slaEvents,
+  };
+}
