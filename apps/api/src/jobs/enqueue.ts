@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import type { AIAnalysisType } from "@prisma/client";
 import { aiQueue, slaQueue } from "./queues.js";
+import { redisConnection } from "./redis.js";
+import { env } from "../config/env.js";
 
 export async function enqueueAiAnalysis(input: {
   analysisId: string;
@@ -8,13 +10,15 @@ export async function enqueueAiAnalysis(input: {
   actorId: string;
   type: AIAnalysisType;
 }) {
+  if (redisConnection.status !== "ready") throw new Error("QUEUE_NOT_READY");
   return aiQueue.add("ticket-analysis", input, {
     jobId: `ai-${input.analysisId}`,
   });
 }
 
 export async function enqueueSlaScan() {
-  const bucket = Math.floor(Date.now() / 60_000);
+  if (redisConnection.status !== "ready") throw new Error("QUEUE_NOT_READY");
+  const bucket = Math.floor(Date.now() / env.SLA_SCAN_INTERVAL_MS);
   return slaQueue.add(
     "sla-scan",
     { requestedAt: new Date().toISOString() },

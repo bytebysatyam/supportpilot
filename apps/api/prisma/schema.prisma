@@ -278,6 +278,7 @@ model SLAEvent {
   ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId, occurredAt])
+  @@unique([ticketId, type])
   @@index([type, occurredAt])
 }
 

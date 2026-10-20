@@ -1,68 +1,32 @@
-# SupportPilot Architecture
+﻿# Architecture
 
-## Goal
+SupportPilot separates the web experience, request-time business rules, durable storage, and background processing.
 
-SupportPilot is structured as a production-style modular monorepo rather than a single-file CRUD application.
+- **Web:** Next.js/React with shared application shell, forms, ticket list/detail, conversation, SLA, and AI components. A shared API client handles JSON errors, session refresh, and timeouts. Frontend navigation guards do not authorize API operations.
+- **API:** Express routes validate payloads, enforce current-account authentication and RBAC, then call domain services. Prisma transactions couple ticket changes with their audit/history records. A central error handler returns sanitized JSON and request IDs.
+- **Database:** PostgreSQL stores users, teams, tickets, messages, assignments, refresh-token hashes, SLA events, audits, and AI analyses. Foreign keys define deletion behavior; indexes support queue lookups and event history. Notification tables are reserved, without a delivery implementation.
+- **Workers:** BullMQ uses Redis for background AI execution and periodic SLA scans. Workers persist result state and handle retries independently of the HTTP request. The API does not wait for model inference.
+- **Provider:** An interface isolates model-vendor calls. The current Groq adapter sends public conversation and validates the resulting structured data before persistence. Disabled AI does not disable ticket workflows.
 
-The architecture is designed to make authorization, business workflows, background processing, AI integrations, persistence, observability, testing, and deployment easy to reason about.
-
-## Components
-
-### Web Application
-The Next.js application handles customer ticket creation, support-agent workflows, admin dashboards, forms, and authenticated navigation. Authorization is still enforced by the API.
-
-### API
-The Express API owns authentication, authorization, ticket workflows, SLA rules, business validation, audit logging, job creation, and persistence orchestration.
-
-### PostgreSQL
-PostgreSQL stores users, teams, tickets, messages, assignments, refresh tokens, AI analyses, SLA events, notifications, and audit logs.
-
-### Redis
-Redis is reserved for asynchronous processing such as AI classification, summarization, notifications, and SLA checks. Background jobs should be retry-safe and idempotent.
-
-### AI Provider Layer
-AI integrations should sit behind a service interface so product logic is not coupled to one model vendor. AI output remains advisory and reviewable by human agents.
-
-## API Versioning
-
-All product endpoints live under `/api/v1`.
-
-## Planned Request Flow
-
-```text
-Client Request
-    ↓
-Validation
-    ↓
-Authentication
-    ↓
-Authorization
-    ↓
-Controller
-    ↓
-Domain Service
-    ↓
-Repository / Prisma
-    ↓
-PostgreSQL
+```mermaid
+sequenceDiagram
+  participant Web
+  participant API
+  participant DB as PostgreSQL
+  participant Queue as Redis / BullMQ
+  participant Worker
+  participant Provider
+  Web->>API: Request analysis
+  API->>DB: Persist PENDING analysis
+  API->>Queue: Enqueue with analysis id
+  API-->>Web: Accepted
+  Queue->>Worker: Execute with retries/backoff
+  Worker->>Provider: Request structured recommendation
+  Provider-->>Worker: JSON
+  Worker->>DB: Validate, persist result + audit
+  Web->>API: Poll analysis status
+  API-->>Web: Advisory result
+  Web->>API: Explicit human-approved ticket update
 ```
 
-For asynchronous work:
-
-```text
-Domain Service
-    ↓
-Persist primary business state
-    ↓
-Create background job
-    ↓
-Redis Queue
-    ↓
-Worker
-    ↓
-AI / Notification provider
-    ↓
-Persist result
-```
-
-Primary ticket operations must not depend on an AI provider being available.
+See [product decisions](product-decisions.md) for transaction boundaries, SLA semantics, session-storage limitations, and queue recovery limits. See [deployment](deployment.md) for process/environment setup and [testing](testing.md) for the distinction between database-backed tests and UI rendering fixtures.

@@ -1,8 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
 import type { UserRole } from "@prisma/client";
 import { verifyAccessToken } from "../auth/token.js";
+import { prisma } from "../lib/prisma.js";
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function authenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   const authorization = req.header("authorization");
 
   if (!authorization?.startsWith("Bearer ")) {
@@ -14,25 +19,25 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     });
   }
 
+  let payload;
   try {
-    const token = authorization.slice("Bearer ".length);
-    const payload = verifyAccessToken(token);
-
-    req.auth = {
-      userId: payload.sub,
-      email: payload.email,
-      role: payload.role,
-    };
-
-    next();
+    payload = verifyAccessToken(authorization.slice("Bearer ".length));
   } catch {
-    return res.status(401).json({
-      error: {
-        code: "INVALID_ACCESS_TOKEN",
-        message: "The access token is invalid or expired.",
-      },
-    });
+    throw new Error("INVALID_ACCESS_TOKEN");
   }
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    select: { id: true, email: true, role: true, status: true },
+  });
+  if (!user || user.status !== "ACTIVE") throw new Error("ACCOUNT_NOT_ACTIVE");
+
+  req.auth = {
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+  };
+
+  next();
 }
 
 export function authorize(...roles: UserRole[]) {

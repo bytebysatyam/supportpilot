@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { env } from "../config/env.js";
+import { z } from "zod";
 
 export type AccessTokenPayload = {
   sub: string;
@@ -17,10 +18,18 @@ export function signAccessToken(payload: AccessTokenPayload) {
 }
 
 export function verifyAccessToken(token: string) {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET, {
+  const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+    algorithms: ["HS256"],
     issuer: "supportpilot-api",
     audience: "supportpilot-web",
-  }) as AccessTokenPayload;
+  });
+  return z
+    .object({
+      sub: z.string().min(1),
+      email: z.string().email(),
+      role: z.enum(["ADMIN", "SUPPORT_AGENT", "CUSTOMER"]),
+    })
+    .parse(payload);
 }
 
 export function createRefreshToken() {

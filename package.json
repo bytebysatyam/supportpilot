@@ -3,10 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "description": "AI-powered customer support and ticket automation platform.",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev:web": "npm run dev --workspace=@supportpilot/web",
     "dev:api": "npm run dev --workspace=@supportpilot/api",
+    "dev:worker": "npm run dev:worker --workspace=@supportpilot/api",
+    "db:generate": "npm run db:generate --workspace=@supportpilot/api",
+    "db:migrate": "npm run db:migrate --workspace=@supportpilot/api --",
+    "db:deploy": "npm run db:deploy --workspace=@supportpilot/api",
+    "db:seed": "npm run db:seed --workspace=@supportpilot/api",
+    "test:e2e": "npm run test:e2e --workspace=@supportpilot/web",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"

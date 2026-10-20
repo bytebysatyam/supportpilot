@@ -44,6 +44,7 @@ export class GroqProvider implements AiProvider {
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
+        signal: AbortSignal.timeout(30_000),
         method: "POST",
         headers: {
           authorization: `Bearer ${env.GROQ_API_KEY}`,

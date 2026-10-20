@@ -8,10 +8,13 @@ import { ticketRouter } from "./routes/ticket.routes.js";
 import { slaRouter } from "./routes/sla.routes.js";
 import { aiRouter } from "./routes/ai.routes.js";
 import { userRouter } from "./routes/user.routes.js";
+import { requestContext, errorHandler } from "./middleware/error.middleware.js";
+import { dashboardRouter } from "./routes/dashboard.routes.js";
 
 export const app = express();
 
 app.disable("x-powered-by");
+app.use(requestContext);
 app.use(helmet());
 app.use(
   cors({
@@ -27,6 +30,7 @@ app.use("/api/v1/tickets", ticketRouter);
 app.use("/api/v1/sla", slaRouter);
 app.use("/api/v1/ai", aiRouter);
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/dashboard", dashboardRouter);
 
 app.use((_req, res) => {
   res.status(404).json({
@@ -36,3 +40,4 @@ app.use((_req, res) => {
     },
   });
 });
+app.use(errorHandler);

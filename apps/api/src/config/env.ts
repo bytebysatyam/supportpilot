@@ -1,13 +1,23 @@
-import "dotenv/config";
+import { fileURLToPath } from "node:url";
+import { config } from "dotenv";
 import { z } from "zod";
 
+// Keep injected variables and workspace overrides ahead of root defaults.
+config();
+config({ path: fileURLToPath(new URL("../../../../.env", import.meta.url)) });
+
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   API_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(32),
-  ACCESS_TOKEN_TTL: z.string().default("15m"),
+  ACCESS_TOKEN_TTL: z
+    .string()
+    .regex(/^[1-9]\d*(s|m|h|d)$/)
+    .default("15m"),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
   SLA_SCAN_INTERVAL_MS: z.coerce.number().int().min(60000).default(300000),
@@ -26,10 +36,7 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-if (
-  parsed.data.AI_PROVIDER === "groq" &&
-  !parsed.data.GROQ_API_KEY
-) {
+if (parsed.data.AI_PROVIDER === "groq" && !parsed.data.GROQ_API_KEY) {
   console.error("GROQ_API_KEY is required when AI_PROVIDER=groq.");
   process.exit(1);
 }

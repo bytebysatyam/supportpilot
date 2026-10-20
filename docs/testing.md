@@ -1,73 +1,64 @@
-# Testing Strategy
+﻿# Testing
 
-SupportPilot keeps testing focused on business-critical behavior rather than superficial coverage.
+## Workspace checks
 
-## Current Automated Tests
-
-The API test suite covers:
-
-- registration and login validation
-- email normalization
-- password-policy validation
-- ticket input validation
-- pagination boundaries
-- SLA deadline calculations
-- SLA response breach detection
-- SLA response success detection
-- SLA at-risk calculation
-
-## Run Locally
-
-Install dependencies and generate the Prisma client first:
-
-```bash
+```powershell
 npm install
-npm run db:generate --workspace=@supportpilot/api
-```
-
-Then run:
-
-```bash
-npm test --workspace=@supportpilot/api
-```
-
-Type-check all workspaces:
-
-```bash
+npm run db:generate
+npx prisma validate --schema=apps/api/prisma/schema.prisma
 npm run typecheck
-```
-
-Build all workspaces:
-
-```bash
+npm test
 npm run build
 ```
 
-## Integration-Test Direction
+The API uses Node's test runner through tsx. The normal suite covers registration role stripping, password rules and bcrypt byte limits, token expiry/audience/claims, refresh-token generation/hashing, ticket scoping and lifecycle policy, SLA deadlines/completion/closure/reopening, AI structured output and disabled providers, and sanitized JSON errors.
 
-The next level of coverage should use an isolated PostgreSQL test database and Redis instance.
+`npm test` discovers the database integration suite but skips it unless explicitly configured. The web workspace's `test` script currently has no Node unit tests; its browser suite runs separately.
 
-High-value integration scenarios include:
+## Real PostgreSQL integration suite
 
-1. customer registration and login
-2. customer cannot access another customer's ticket
-3. customer cannot create an internal note
-4. support agent can update a ticket
-5. assignment history closes the previous assignment
-6. refresh-token rotation invalidates the previous token
-7. first public staff reply satisfies or breaches the SLA
-8. repeated SLA scans do not intentionally duplicate the same event
-9. AI jobs create a durable pending analysis before queue execution
-10. completed AI analysis remains advisory until a human applies it
+Use a dedicated local database named with an `_test` suffix. The suite refuses a non-local host or a differently named database. It creates uniquely named synthetic accounts and removes only its own tickets/accounts afterward. It does not reset the database.
 
-## Test Data
+After generating and reviewing the real initial migration, create an empty local test database, then configure this PowerShell session:
 
-Do not use production credentials, customer data, company data, or real support records in automated tests.
+```powershell
+$env:DATABASE_URL = 'postgresql://supportpilot:supportpilot@localhost:5432/supportpilot_test?schema=public'
+npm run db:deploy
+$env:SUPPORTPILOT_TEST_DATABASE_URL = $env:DATABASE_URL
+npm test --workspace=@supportpilot/api
+```
 
-Use deterministic synthetic fixtures.
+Return to a fresh shell for normal development so test environment overrides do not affect your development API. The database must have the current schema, including the SLA uniqueness constraint. CI uses its disposable PostgreSQL service with schema push; this is separate from migration-deployment verification.
 
-## Current Verification Status
+The integration test exercises actual HTTP requests and Prisma operations for:
 
-The test files are committed as part of Phase 9.
+- public registration with an attempted ADMIN role;
+- customer ownership, internal-note privacy, and staff-only endpoints;
+- first public response and concurrent duplicate assignment handling;
+- unassignment, lifecycle updates, reopening, and fixed SLA deadlines;
+- repeated/concurrent SLA breach scans;
+- dashboard and staff-directory RBAC;
+- disabled AI requests and persisted worker failure state;
+- concurrent refresh rotation, revoked refresh rejection, and suspended-account rejection.
 
-They should be run in a real local/CI environment with dependencies installed and the Prisma client generated. The repository does not claim a passing test run unless that execution has actually occurred.
+Real provider inference and Redis/BullMQ job execution require their services and are not replaced with fake providers in this suite.
+
+## Browser tests
+
+```powershell
+npm run test:e2e
+```
+
+Playwright runs the app on temporary port 3001, owns its server lifecycle, and uses installed Edge on Windows. Stop other Next dev/build processes first: both use `.next`. To use Chrome, set `PLAYWRIGHT_CHANNEL=chrome` in your shell. On Linux/macOS install Chromium once:
+
+```powershell
+npm exec --workspace=@supportpilot/web -- playwright install chromium
+```
+
+The suite runs at 1440×960, 1280×800, 820×1180, and 390×844. It checks auth form labels/navigation, protected-route redirects, error/retry rendering, and horizontal overflow. Separate workspace rendering contracts use synthetic API fixtures to check queue metrics, staff detail/internal notes/AI-disabled state, and customer detail without staff controls. These are UI contract tests, not evidence that persistence or authorization works end-to-end.
+
+Screenshots and traces are ignored under `apps/web/test-results`; open retained failure traces with Playwright's `show-trace`. No fixture screenshots are marketed as real application data.
+
+## Current results
+
+See [product verification](product-verification.md). Passing unit, build, and rendering tests do not establish migration, provider, queue, or production-deployment readiness.

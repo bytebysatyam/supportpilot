@@ -8,8 +8,9 @@ import {
 } from "./ai.schemas.js";
 import { getAiProvider } from "./provider.factory.js";
 import type { AiAnalysisJob } from "../jobs/job.types.js";
+import { lockTicket } from "../tickets/ticket.policy.js";
 
-function validateResult(type: AiAnalysisJob["type"], raw: unknown) {
+export function validateResult(type: AiAnalysisJob["type"], raw: unknown) {
   switch (type) {
     case "CLASSIFICATION":
       return classificationResultSchema.parse(raw);
@@ -36,6 +37,9 @@ export async function processAiAnalysis(job: AiAnalysisJob) {
   if (!analysis) {
     throw new Error("AI_ANALYSIS_NOT_FOUND");
   }
+
+  if (analysis.ticketId !== job.ticketId || analysis.type !== job.type)
+    throw new Error("AI_JOB_MISMATCH");
 
   if (analysis.status === "COMPLETED") {
     return analysis;
@@ -70,44 +74,55 @@ export async function processAiAnalysis(job: AiAnalysisJob) {
   }
 
   try {
+    await prisma.aIAnalysis.update({
+      where: { id: analysis.id },
+      data: { status: "PENDING", errorMessage: null, completedAt: null },
+    });
     const provider = getAiProvider();
     const generated = await provider.run(job.type, ticket);
     const result = validateResult(job.type, generated.raw);
 
-    const completed = await prisma.aIAnalysis.update({
-      where: { id: analysis.id },
-      data: {
-        status: "COMPLETED",
-        provider: generated.provider,
-        model: generated.model,
-        result: result as Prisma.InputJsonValue,
-        errorMessage: null,
-        completedAt: new Date(),
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        ticketId: job.ticketId,
-        actorId: job.actorId,
-        action: "AI_ANALYSIS_CREATED",
-        metadata: {
-          analysisId: completed.id,
-          type: job.type,
+    return await prisma.$transaction(async (tx) => {
+      await lockTicket(tx, job.ticketId);
+      const existing = await tx.aIAnalysis.findUniqueOrThrow({
+        where: { id: analysis.id },
+      });
+      if (existing.status === "COMPLETED") return existing;
+      const completed = await tx.aIAnalysis.update({
+        where: { id: analysis.id },
+        data: {
+          status: "COMPLETED",
           provider: generated.provider,
           model: generated.model,
-          execution: "background-job",
+          result: result as Prisma.InputJsonValue,
+          errorMessage: null,
+          completedAt: new Date(),
         },
-      },
-    });
+      });
 
-    return completed;
+      await tx.auditLog.create({
+        data: {
+          ticketId: job.ticketId,
+          actorId: job.actorId,
+          action: "AI_ANALYSIS_CREATED",
+          metadata: {
+            analysisId: completed.id,
+            type: job.type,
+            provider: generated.provider,
+            model: generated.model,
+            execution: "background-job",
+          },
+        },
+      });
+
+      return completed;
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "AI_ANALYSIS_FAILED";
 
-    await prisma.aIAnalysis.update({
-      where: { id: analysis.id },
+    await prisma.aIAnalysis.updateMany({
+      where: { id: analysis.id, status: { not: "COMPLETED" } },
       data: {
         status: "FAILED",
         errorMessage: message.slice(0, 1000),

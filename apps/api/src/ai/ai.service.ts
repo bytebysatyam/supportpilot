@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import type { AIAnalysisType, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { enqueueAiAnalysis } from "../jobs/enqueue.js";
+import { lockTicket } from "../tickets/ticket.policy.js";
+import { env } from "../config/env.js";
 
 type Actor = {
   userId: string;
@@ -20,6 +22,7 @@ export async function requestTicketAiAnalysis(
   type: AIAnalysisType,
 ) {
   assertStaff(actor);
+  if (env.AI_PROVIDER === "disabled") throw new Error("AI_PROVIDER_DISABLED");
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -54,34 +57,26 @@ export async function requestTicketAiAnalysis(
     )
     .digest("hex");
 
-  const recentEquivalent = await prisma.aIAnalysis.findFirst({
-    where: {
-      ticketId,
-      type,
-      inputHash,
-      status: {
-        in: ["PENDING", "COMPLETED"],
+  const prepared = await prisma.$transaction(async (tx) => {
+    await lockTicket(tx, ticketId);
+    const existing = await tx.aIAnalysis.findFirst({
+      where: {
+        ticketId,
+        type,
+        inputHash,
+        status: { in: ["PENDING", "COMPLETED"] },
       },
-    },
-    orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) return { analysis: existing, deduplicated: true };
+    const analysis = await tx.aIAnalysis.create({
+      data: { ticketId, type, status: "PENDING", inputHash },
+    });
+    return { analysis, deduplicated: false };
   });
-
-  if (recentEquivalent) {
-    return {
-      analysis: recentEquivalent,
-      queued: false,
-      deduplicated: true,
-    };
-  }
-
-  const analysis = await prisma.aIAnalysis.create({
-    data: {
-      ticketId,
-      type,
-      status: "PENDING",
-      inputHash,
-    },
-  });
+  const { analysis } = prepared;
+  if (prepared.deduplicated)
+    return { analysis, queued: false, deduplicated: true };
 
   try {
     await enqueueAiAnalysis({
@@ -100,7 +95,7 @@ export async function requestTicketAiAnalysis(
       },
     });
 
-    throw error;
+    throw new Error("AI_QUEUE_UNAVAILABLE");
   }
 
   return {
@@ -110,10 +105,7 @@ export async function requestTicketAiAnalysis(
   };
 }
 
-export async function listTicketAiAnalyses(
-  actor: Actor,
-  ticketId: string,
-) {
+export async function listTicketAiAnalyses(actor: Actor, ticketId: string) {
   assertStaff(actor);
 
   const exists = await prisma.ticket.findUnique({

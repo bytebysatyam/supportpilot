@@ -1,10 +1,7 @@
-import type {
-  Prisma,
-  TicketPriority,
-  TicketStatus,
-} from "@prisma/client";
+import type { Prisma, TicketPriority, TicketStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { getSlaDeadlines } from "./sla.policy.js";
+import { lockTicket } from "../tickets/ticket.policy.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -28,19 +25,19 @@ export function slaFieldsForNewTicket(
 
 export function computeSlaSnapshot(ticket: SlaState, now = new Date()) {
   const firstResponseBreached =
-    !ticket.firstRespondedAt &&
     !!ticket.firstResponseDueAt &&
-    now > ticket.firstResponseDueAt;
+    (ticket.firstRespondedAt ?? ticket.closedAt ?? now) >
+      ticket.firstResponseDueAt;
 
   const resolutionCompleted = Boolean(ticket.resolvedAt || ticket.closedAt);
 
   const resolutionBreached =
-    !resolutionCompleted &&
     !!ticket.resolutionDueAt &&
-    now > ticket.resolutionDueAt;
+    (ticket.resolvedAt ?? ticket.closedAt ?? now) > ticket.resolutionDueAt;
 
   const firstResponseAtRisk =
     !ticket.firstRespondedAt &&
+    !ticket.closedAt &&
     !!ticket.firstResponseDueAt &&
     !firstResponseBreached &&
     ticket.firstResponseDueAt.getTime() - now.getTime() <= 30 * 60_000;
@@ -57,6 +54,7 @@ export function computeSlaSnapshot(ticket: SlaState, now = new Date()) {
     firstResponse: {
       dueAt: ticket.firstResponseDueAt,
       respondedAt: ticket.firstRespondedAt,
+      closedWithoutReply: !!ticket.closedAt && !ticket.firstRespondedAt,
       met:
         !!ticket.firstRespondedAt &&
         !!ticket.firstResponseDueAt &&
@@ -77,23 +75,6 @@ export function computeSlaSnapshot(ticket: SlaState, now = new Date()) {
   };
 }
 
-async function eventExists(
-  tx: Tx,
-  ticketId: string,
-  type:
-    | "FIRST_RESPONSE_DUE"
-    | "FIRST_RESPONSE_MET"
-    | "FIRST_RESPONSE_BREACHED"
-    | "RESOLUTION_DUE"
-    | "RESOLUTION_MET"
-    | "RESOLUTION_BREACHED",
-) {
-  return tx.sLAEvent.findFirst({
-    where: { ticketId, type },
-    select: { id: true },
-  });
-}
-
 async function createEventOnce(
   tx: Tx,
   input: {
@@ -109,18 +90,18 @@ async function createEventOnce(
     metadata?: Prisma.InputJsonValue;
   },
 ) {
-  if (await eventExists(tx, input.ticketId, input.type)) {
-    return false;
-  }
-
-  await tx.sLAEvent.create({
-    data: {
-      ticketId: input.ticketId,
-      type: input.type,
-      dueAt: input.dueAt ?? undefined,
-      metadata: input.metadata,
-    },
+  const created = await tx.sLAEvent.createMany({
+    skipDuplicates: true,
+    data: [
+      {
+        ticketId: input.ticketId,
+        type: input.type,
+        dueAt: input.dueAt ?? undefined,
+        metadata: input.metadata,
+      },
+    ],
   });
+  if (created.count === 0) return false;
 
   await tx.auditLog.create({
     data: {
@@ -221,11 +202,17 @@ export async function refreshOpenTicketBreaches(now = new Date()) {
         resolvedAt: true,
         closedAt: true,
       },
+      orderBy: { id: "asc" },
     });
 
     let eventsCreated = 0;
 
-    for (const ticket of tickets) {
+    for (const candidate of tickets) {
+      await lockTicket(tx, candidate.id);
+      const ticket = await tx.ticket.findUnique({
+        where: { id: candidate.id },
+      });
+      if (!ticket || ticket.status === "CLOSED") continue;
       if (
         !ticket.firstRespondedAt &&
         ticket.firstResponseDueAt &&

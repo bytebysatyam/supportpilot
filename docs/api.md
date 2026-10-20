@@ -218,7 +218,7 @@ GET /tickets/:ticketId/messages
 GET /tickets/:ticketId/timeline
 ```
 
-The customer timeline is intentionally filtered to prevent leakage of internal workflow details.
+The timeline is staff-only. Customers receive only public messages from the messages endpoint; internal audit details are never returned to customer accounts.
 
 ---
 
@@ -236,7 +236,7 @@ Returns first-response and resolution state including:
 - met
 - breached
 - at risk
-- persisted SLA events
+- persisted SLA events (staff only)
 
 Customers may access SLA information only for tickets they own.
 
@@ -248,7 +248,7 @@ POST /sla/refresh-breaches
 
 Staff only.
 
-In normal operation Phase 7's worker performs periodic scans.
+The SLA worker performs periodic scans in normal operation. Deadlines remain fixed at creation, including after priority changes or reopening.
 
 ---
 
@@ -335,8 +335,6 @@ Typical HTTP statuses:
 | 403 | Authenticated but unauthorized |
 | 404 | Resource not found or not visible to caller |
 | 409 | State transition/conflict |
-| 422 | Structurally invalid generated output |
-| 502 | External provider failure |
 | 503 | Required asynchronous/provider infrastructure unavailable |
 
 ## Security Notes
@@ -347,3 +345,13 @@ Typical HTTP statuses:
 - Customers are server-scoped to their own ticket resources.
 - Internal notes are filtered server-side.
 - AI suggestions require human review.
+
+## Operations endpoints
+
+- `GET /dashboard/summary`: staff-only, database-wide active queue counts (open, unassigned, urgent, overdue, at risk, assigned to current agent), with an as-of timestamp.
+- `GET /dashboard/staff`: ADMIN only, staff name/email/role/status plus active assignment counts. Password and refresh-token data are excluded.
+- `GET /ai/capabilities`: staff-only provider availability; never returns provider credentials.
+
+Disabled AI requests return 503 `AI_PROVIDER_DISABLED` before persisting or enqueueing. Provider/queue execution errors are recorded on analyses; they are not returned as synchronous inference errors. Only a human-approved ticket PATCH or message POST applies an AI recommendation.
+
+Unknown failures return sanitized JSON with a request ID (also available in the `x-request-id` header). Database outages return 503. Bad JSON and Zod validation failures return 400.

@@ -26,11 +26,14 @@ function publicUser(user: {
   };
 }
 
-async function issueSession(user: {
-  id: string;
-  email: string;
-  role: "ADMIN" | "SUPPORT_AGENT" | "CUSTOMER";
-}) {
+async function issueSession(
+  user: {
+    id: string;
+    email: string;
+    role: "ADMIN" | "SUPPORT_AGENT" | "CUSTOMER";
+  },
+  db: Prisma.TransactionClient = prisma,
+) {
   const accessToken = signAccessToken({
     sub: user.id,
     email: user.email,
@@ -39,7 +42,7 @@ async function issueSession(user: {
 
   const refreshToken = createRefreshToken();
 
-  await prisma.refreshToken.create({
+  await db.refreshToken.create({
     data: {
       userId: user.id,
       tokenHash: hashRefreshToken(refreshToken),
@@ -58,25 +61,27 @@ export async function registerCustomer(input: {
   const passwordHash = await hashPassword(input.password);
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        name: input.name,
-        email: input.email,
-        passwordHash,
-        role: "CUSTOMER",
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: input.name,
+          email: input.email,
+          passwordHash,
+          role: "CUSTOMER",
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+      });
 
-    const session = await issueSession(user);
-    return { user: publicUser(user), ...session };
+      const session = await issueSession(user, tx);
+      return { user: publicUser(user), ...session };
+    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -123,10 +128,11 @@ export async function rotateRefreshToken(rawToken: string) {
       throw new Error("INVALID_REFRESH_TOKEN");
     }
 
-    await tx.refreshToken.update({
-      where: { id: stored.id },
+    const consumed = await tx.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null, expiresAt: { gt: new Date() } },
       data: { revokedAt: new Date() },
     });
+    if (consumed.count !== 1) throw new Error("INVALID_REFRESH_TOKEN");
 
     const nextRawToken = createRefreshToken();
     await tx.refreshToken.create({

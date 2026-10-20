@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SupportPilot",
-  description: "AI-powered customer support and ticket automation platform.",
+  description:
+    "A shared workspace for support requests, conversations, ownership, and response deadlines.",
 };
 
 export default function RootLayout({

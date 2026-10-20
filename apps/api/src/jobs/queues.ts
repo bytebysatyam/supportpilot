@@ -32,5 +32,11 @@ export const slaQueue = new Queue(SLA_QUEUE_NAME, {
 
 export async function closeQueues() {
   await Promise.all([aiQueue.close(), slaQueue.close()]);
-  await redisConnection.quit();
+  redisConnection.disconnect();
+}
+
+for (const queue of [aiQueue, slaQueue]) {
+  queue.on("error", () =>
+    console.error(JSON.stringify({ event: "queue_error", queue: queue.name })),
+  );
 }

@@ -1,6 +1,7 @@
 import type { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { recordFirstResponseSla } from "../sla/sla.service.js";
+import { lockTicket } from "./ticket.policy.js";
 
 type Actor = {
   userId: string;
@@ -23,6 +24,7 @@ export async function addTicketMessage(
   }
 
   return prisma.$transaction(async (tx) => {
+    await lockTicket(tx, ticketId);
     const ticket = await tx.ticket.findFirst({
       where: ticketScope(actor, ticketId),
       select: {
@@ -64,18 +66,19 @@ export async function addTicketMessage(
       },
     });
 
-    if (
+    const respondedAt = new Date();
+    const isFirstStaffReply =
       actor.role !== "CUSTOMER" &&
       !input.isInternal &&
-      !ticket.firstRespondedAt
-    ) {
-      const respondedAt = new Date();
-
-      await tx.ticket.update({
-        where: { id: ticketId },
-        data: { firstRespondedAt: respondedAt },
-      });
-
+      !ticket.firstRespondedAt;
+    await tx.ticket.update({
+      where: { id: ticketId },
+      data: {
+        updatedAt: respondedAt,
+        ...(isFirstStaffReply ? { firstRespondedAt: respondedAt } : {}),
+      },
+    });
+    if (isFirstStaffReply) {
       await recordFirstResponseSla(tx, ticket, respondedAt);
     }
 
@@ -131,6 +134,7 @@ export async function listTicketMessages(actor: Actor, ticketId: string) {
 }
 
 export async function getTicketTimeline(actor: Actor, ticketId: string) {
+  if (actor.role === "CUSTOMER") throw new Error("FORBIDDEN");
   const ticket = await prisma.ticket.findFirst({
     where: ticketScope(actor, ticketId),
     select: { id: true },
@@ -144,7 +148,6 @@ export async function getTicketTimeline(actor: Actor, ticketId: string) {
     prisma.ticketMessage.findMany({
       where: {
         ticketId,
-        ...(actor.role === "CUSTOMER" ? { isInternal: false } : {}),
       },
       select: {
         id: true,
@@ -164,13 +167,6 @@ export async function getTicketTimeline(actor: Actor, ticketId: string) {
     prisma.auditLog.findMany({
       where: {
         ticketId,
-        ...(actor.role === "CUSTOMER"
-          ? {
-              action: {
-                in: ["TICKET_CREATED", "STATUS_CHANGED"],
-              },
-            }
-          : {}),
       },
       select: {
         id: true,
@@ -199,7 +195,5 @@ export async function getTicketTimeline(actor: Actor, ticketId: string) {
       occurredAt: audit.createdAt,
       data: audit,
     })),
-  ].sort(
-    (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
-  );
+  ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 }

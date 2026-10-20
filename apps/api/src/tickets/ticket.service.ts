@@ -11,6 +11,11 @@ import {
   recordResolutionSla,
   slaFieldsForNewTicket,
 } from "../sla/sla.service.js";
+import {
+  allowedStatusTransitions,
+  scopeWhere,
+  lockTicket,
+} from "./ticket.policy.js";
 
 type Actor = {
   userId: string;
@@ -68,22 +73,6 @@ const ticketDetailSelect = {
     },
   },
 } satisfies Prisma.TicketSelect;
-
-const allowedStatusTransitions: Record<TicketStatus, TicketStatus[]> = {
-  OPEN: ["IN_PROGRESS", "CLOSED"],
-  IN_PROGRESS: ["OPEN", "WAITING_ON_CUSTOMER", "RESOLVED"],
-  WAITING_ON_CUSTOMER: ["IN_PROGRESS", "RESOLVED"],
-  RESOLVED: ["IN_PROGRESS", "CLOSED"],
-  CLOSED: [],
-};
-
-function scopeWhere(actor: Actor): Prisma.TicketWhereInput {
-  if (actor.role === "CUSTOMER") {
-    return { customerId: actor.userId };
-  }
-
-  return {};
-}
 
 export async function createTicket(
   actor: Actor,
@@ -216,6 +205,7 @@ export async function updateTicket(
   }
 
   return prisma.$transaction(async (tx) => {
+    await lockTicket(tx, ticketId);
     const current = await tx.ticket.findUnique({
       where: { id: ticketId },
       select: {
@@ -335,6 +325,7 @@ export async function assignTicket(
   }
 
   return prisma.$transaction(async (tx) => {
+    await lockTicket(tx, ticketId);
     const ticket = await tx.ticket.findUnique({
       where: { id: ticketId },
       select: {

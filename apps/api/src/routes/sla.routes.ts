@@ -43,7 +43,11 @@ slaRouter.get("/tickets/:ticketId", async (req, res) => {
   }
 
   try {
-    return res.status(200).json(await getTicketSla(parsedId.data));
+    const result = await getTicketSla(parsedId.data);
+    if (req.auth!.role === "CUSTOMER") {
+      return res.json({ ticketId: result.ticketId, priority: result.priority, status: result.status, firstResponse: result.firstResponse, resolution: result.resolution });
+    }
+    return res.status(200).json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "TICKET_NOT_FOUND") {
       return res.status(404).json({
