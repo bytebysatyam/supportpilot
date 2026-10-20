@@ -4,7 +4,7 @@ import { authenticate, authorize } from "../middleware/auth.middleware.js";
 import { aiRunSchema } from "../ai/ai.schemas.js";
 import {
   listTicketAiAnalyses,
-  runTicketAiAnalysis,
+  requestTicketAiAnalysis,
 } from "../ai/ai.service.js";
 
 export const aiRouter = Router();
@@ -28,7 +28,7 @@ aiRouter.post("/tickets/:ticketId/analyze", async (req, res) => {
   }
 
   try {
-    const result = await runTicketAiAnalysis(
+    const result = await requestTicketAiAnalysis(
       {
         userId: req.auth!.userId,
         role: req.auth!.role,
@@ -37,7 +37,7 @@ aiRouter.post("/tickets/:ticketId/analyze", async (req, res) => {
       parsedBody.data.type,
     );
 
-    return res.status(201).json(result);
+    return res.status(202).json(result);
   } catch (error) {
     if (!(error instanceof Error)) throw error;
 
@@ -50,28 +50,10 @@ aiRouter.post("/tickets/:ticketId/analyze", async (req, res) => {
       });
     }
 
-    if (error.message === "AI_PROVIDER_DISABLED") {
-      return res.status(503).json({
-        error: {
-          code: "AI_PROVIDER_DISABLED",
-          message: "AI automation is not configured.",
-        },
-      });
-    }
-
-    if (error.message.startsWith("AI_PROVIDER_")) {
-      return res.status(502).json({
-        error: {
-          code: "AI_PROVIDER_ERROR",
-          message: "The configured AI provider could not complete the request.",
-        },
-      });
-    }
-
-    return res.status(422).json({
+    return res.status(503).json({
       error: {
-        code: "AI_OUTPUT_INVALID",
-        message: "The AI response did not match the expected structured format.",
+        code: "AI_QUEUE_UNAVAILABLE",
+        message: "The AI job could not be queued. Please try again.",
       },
     });
   }
