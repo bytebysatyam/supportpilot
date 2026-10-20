@@ -6,7 +6,7 @@ SupportPilot is designed to demonstrate end-to-end software engineering across a
 
 ## Current Status
 
-**Phase 3 — Ticket lifecycle + assignment implemented**
+**Phase 4 — Messages + audit logs implemented**
 
 The repository currently contains:
 
@@ -24,6 +24,9 @@ The repository currently contains:
 - Staff ticket queue with filters, search, and pagination
 - Ticket status, priority, and category management
 - Agent assignment/reassignment with assignment history
+- Public ticket replies and staff-only internal notes
+- Customer-safe message visibility
+- Transactional ticket audit events and unified timeline
 - Health-check API
 - Architecture and phase documentation
 - Monorepo scripts
@@ -157,7 +160,7 @@ Frontend default: `http://localhost:3000`
 2. **Phase 1:** PostgreSQL + Prisma data model ✅
 3. **Phase 2:** Authentication + RBAC ✅
 4. **Phase 3:** Ticket lifecycle + assignment ✅
-5. **Phase 4:** Messages + audit logs
+5. **Phase 4:** Messages + audit logs ✅
 6. **Phase 5:** SLA engine
 7. **Phase 6:** AI automation
 8. **Phase 7:** Background jobs
