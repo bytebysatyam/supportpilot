@@ -18,7 +18,7 @@ app.use(requestContext);
 app.use(helmet());
 app.use(
   cors({
-    origin: env.WEB_ORIGIN,
+    origin: env.WEB_ORIGIN.split(",").map(origin => origin.trim()),
     credentials: true,
   }),
 );

@@ -13,10 +13,10 @@ COPY tsconfig.base.json ./
 COPY apps/web apps/web
 COPY packages/types packages/types
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-RUN npm run build --workspace=@supportpilot/web
+RUN test -n "$NEXT_PUBLIC_API_URL" && npm run build --workspace=@supportpilot/web
 
 FROM node:22-alpine AS runtime
 

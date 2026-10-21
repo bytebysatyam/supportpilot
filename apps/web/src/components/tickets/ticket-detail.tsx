@@ -270,10 +270,27 @@ export function TicketDetail({
               </button>
             </div>
           </form>
-          {!customer && <TicketActivity timeline={timeline} assignments={assignments} />}
+          {!customer && (
+            <TicketActivity timeline={timeline} assignments={assignments} />
+          )}
         </div>
         <aside className="ticket-side-column">
-          {!customer && <TicketProperties ticket={ticket} agents={agents} busy={busy} onUpdate={update} onAssign={agentId => void mutate(`/tickets/${id}/assignment`, "PUT", { agentId }, "Assignment updated.")} />}
+          {!customer && (
+            <TicketProperties
+              ticket={ticket}
+              agents={agents}
+              busy={busy}
+              onUpdate={update}
+              onAssign={(agentId) =>
+                void mutate(
+                  `/tickets/${id}/assignment`,
+                  "PUT",
+                  { agentId },
+                  "Assignment updated.",
+                )
+              }
+            />
+          )}
           <SlaCard snapshot={sla} />
           <section className="panel detail-card">
             <h2>{customer ? "Support contact" : "Customer context"}</h2>

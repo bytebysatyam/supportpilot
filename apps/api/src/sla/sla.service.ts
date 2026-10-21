@@ -179,40 +179,41 @@ export async function recordResolutionSla(
 }
 
 export async function refreshOpenTicketBreaches(now = new Date()) {
-  return prisma.$transaction(async (tx) => {
-    const tickets = await tx.ticket.findMany({
-      where: {
-        status: { not: "CLOSED" },
-        OR: [
-          {
-            firstRespondedAt: null,
-            firstResponseDueAt: { lt: now },
-          },
-          {
-            resolvedAt: null,
-            resolutionDueAt: { lt: now },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        firstResponseDueAt: true,
-        firstRespondedAt: true,
-        resolutionDueAt: true,
-        resolvedAt: true,
-        closedAt: true,
-      },
-      orderBy: { id: "asc" },
-    });
+  const tickets = await prisma.ticket.findMany({
+    where: {
+      status: { not: "CLOSED" },
+      OR: [
+        {
+          firstRespondedAt: null,
+          firstResponseDueAt: { lt: now },
+        },
+        {
+          resolvedAt: null,
+          resolutionDueAt: { lt: now },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      firstResponseDueAt: true,
+      firstRespondedAt: true,
+      resolutionDueAt: true,
+      resolvedAt: true,
+      closedAt: true,
+    },
+    orderBy: { id: "asc" },
+  });
 
-    let eventsCreated = 0;
+  let eventsCreated = 0;
 
-    for (const candidate of tickets) {
+  for (const candidate of tickets) {
+    eventsCreated += await prisma.$transaction(async (tx) => {
+      let created = 0;
       await lockTicket(tx, candidate.id);
       const ticket = await tx.ticket.findUnique({
         where: { id: candidate.id },
       });
-      if (!ticket || ticket.status === "CLOSED") continue;
+      if (!ticket || ticket.status === "CLOSED") return 0;
       if (
         !ticket.firstRespondedAt &&
         ticket.firstResponseDueAt &&
@@ -225,7 +226,7 @@ export async function refreshOpenTicketBreaches(now = new Date()) {
             dueAt: ticket.firstResponseDueAt,
           })
         ) {
-          eventsCreated += 1;
+          created += 1;
         }
       }
 
@@ -242,17 +243,18 @@ export async function refreshOpenTicketBreaches(now = new Date()) {
             dueAt: ticket.resolutionDueAt,
           })
         ) {
-          eventsCreated += 1;
+          created += 1;
         }
       }
-    }
+      return created;
+    });
+  }
 
-    return {
-      checkedAt: now,
-      ticketsChecked: tickets.length,
-      eventsCreated,
-    };
-  });
+  return {
+    checkedAt: now,
+    ticketsChecked: tickets.length,
+    eventsCreated,
+  };
 }
 
 export async function getTicketSla(ticketId: string) {

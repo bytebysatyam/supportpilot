@@ -14,7 +14,7 @@ paths:
       summary: API health check
       responses:
         "200":
-          description: Service is healthy
+          description: API process is responding; does not verify database or Redis readiness
   /auth/register:
     post:
       security: []
@@ -172,7 +172,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/TicketId"
     get:
-      summary: Get filtered ticket activity timeline
+      summary: Get staff-only ticket activity timeline
       responses:
         "200":
           description: Timeline
@@ -259,6 +259,28 @@ paths:
       responses:
         "200":
           description: Active support-agent directory
+  /dashboard/summary:
+    get:
+      summary: Staff-only aggregate metrics over the full active queue
+      responses:
+        "200":
+          description: Counts for active, unassigned, urgent, overdue, at-risk, and assigned-to-me tickets plus an as-of timestamp
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /dashboard/staff:
+    get:
+      summary: Admin-only staff directory with active assignment counts
+      responses:
+        "200":
+          description: Staff id, name, email, role, status and active assigned-ticket count
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /ai/capabilities:
+    get:
+      summary: Staff-only AI provider availability without credentials
+      responses:
+        "200":
+          description: Whether AI is enabled and the provider name
 components:
   securitySchemes:
     bearerAuth:
@@ -317,7 +339,8 @@ components:
       enum: [LOW, MEDIUM, HIGH, URGENT]
     TicketCategory:
       type: string
-      enum: [GENERAL, BILLING, TECHNICAL, ACCOUNT, PRODUCT, FEATURE_REQUEST, OTHER]
+      enum:
+        [GENERAL, BILLING, TECHNICAL, ACCOUNT, PRODUCT, FEATURE_REQUEST, OTHER]
   responses:
     BadRequest:
       description: Validation error

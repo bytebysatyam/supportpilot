@@ -71,8 +71,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Prepare disposable integration schema
-        run: npm exec --workspace=@supportpilot/api -- prisma db push --skip-generate
+      - name: Apply migrations to disposable integration database
+        run: npm run db:deploy
 
       - name: Test
         run: npm test

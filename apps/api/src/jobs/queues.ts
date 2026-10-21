@@ -1,5 +1,6 @@
 import { Queue } from "bullmq";
 import { redisConnection } from "./redis.js";
+import { logInfrastructureError } from "../lib/infrastructure-log.js";
 
 export const AI_QUEUE_NAME = "supportpilot-ai";
 export const SLA_QUEUE_NAME = "supportpilot-sla";
@@ -37,6 +38,6 @@ export async function closeQueues() {
 
 for (const queue of [aiQueue, slaQueue]) {
   queue.on("error", () =>
-    console.error(JSON.stringify({ event: "queue_error", queue: queue.name })),
+    logInfrastructureError("queue_error", queue.name),
   );
 }

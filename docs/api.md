@@ -324,18 +324,18 @@ GET /health
 
 Typical HTTP statuses:
 
-| Status | Meaning |
-| --- | --- |
-| 200 | Successful read/update |
-| 201 | Resource created |
-| 202 | Async work accepted |
-| 204 | Successful request with no response body |
-| 400 | Validation failure |
-| 401 | Missing/invalid authentication |
-| 403 | Authenticated but unauthorized |
-| 404 | Resource not found or not visible to caller |
-| 409 | State transition/conflict |
-| 503 | Required asynchronous/provider infrastructure unavailable |
+| Status | Meaning                                                   |
+| ------ | --------------------------------------------------------- |
+| 200    | Successful read/update                                    |
+| 201    | Resource created                                          |
+| 202    | Async work accepted                                       |
+| 204    | Successful request with no response body                  |
+| 400    | Validation failure                                        |
+| 401    | Missing/invalid authentication                            |
+| 403    | Authenticated but unauthorized                            |
+| 404    | Resource not found or not visible to caller               |
+| 409    | State transition/conflict                                 |
+| 503    | Required asynchronous/provider infrastructure unavailable |
 
 ## Security Notes
 

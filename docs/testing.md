@@ -3,9 +3,9 @@
 ## Workspace checks
 
 ```powershell
-npm install
+npm ci
 npm run db:generate
-npx prisma validate --schema=apps/api/prisma/schema.prisma
+npm exec --workspace=@supportpilot/api -- prisma validate
 npm run typecheck
 npm test
 npm run build
@@ -19,7 +19,7 @@ The API uses Node's test runner through tsx. The normal suite covers registratio
 
 Use a dedicated local database named with an `_test` suffix. The suite refuses a non-local host or a differently named database. It creates uniquely named synthetic accounts and removes only its own tickets/accounts afterward. It does not reset the database.
 
-After generating and reviewing the real initial migration, create an empty local test database, then configure this PowerShell session:
+The real initial migration is checked in. Create an empty local test database, then configure this PowerShell session:
 
 ```powershell
 $env:DATABASE_URL = 'postgresql://supportpilot:supportpilot@localhost:5432/supportpilot_test?schema=public'
@@ -28,7 +28,7 @@ $env:SUPPORTPILOT_TEST_DATABASE_URL = $env:DATABASE_URL
 npm test --workspace=@supportpilot/api
 ```
 
-Return to a fresh shell for normal development so test environment overrides do not affect your development API. The database must have the current schema, including the SLA uniqueness constraint. CI uses its disposable PostgreSQL service with schema push; this is separate from migration-deployment verification.
+Return to a fresh shell for normal development so test environment overrides do not affect your development API. The database must have the current schema, including the SLA uniqueness constraint. CI deploys the checked-in migrations to its disposable PostgreSQL service.
 
 The integration test exercises actual HTTP requests and Prisma operations for:
 
@@ -49,7 +49,7 @@ Real provider inference and Redis/BullMQ job execution require their services an
 npm run test:e2e
 ```
 
-Playwright runs the app on temporary port 3001, owns its server lifecycle, and uses installed Edge on Windows. Stop other Next dev/build processes first: both use `.next`. To use Chrome, set `PLAYWRIGHT_CHANNEL=chrome` in your shell. On Linux/macOS install Chromium once:
+Run `npm run build` first. Playwright runs the standalone production server on temporary port 3001, owns its server lifecycle, and uses installed Edge on Windows. Development output lives separately in `.next-dev`; production builds and browser tests must run sequentially because both use `.next`. To use Chrome, set `PLAYWRIGHT_CHANNEL=chrome` in your shell. On Linux/macOS install Chromium once:
 
 ```powershell
 npm exec --workspace=@supportpilot/web -- playwright install chromium
@@ -61,4 +61,18 @@ Screenshots and traces are ignored under `apps/web/test-results`; open retained 
 
 ## Current results
 
-See [product verification](product-verification.md). Passing unit, build, and rendering tests do not establish migration, provider, queue, or production-deployment readiness.
+See [current environment verification](environment-verification.md). Passing unit, build, and rendering tests do not establish provider, queue, or production-deployment readiness.
+
+## Real development browser/API flow
+
+Start real local PostgreSQL/Redis, deploy migrations, seed demo accounts, and run the API and web development servers in separate terminals. This explicitly enabled suite creates synthetic development accounts/tickets and preserves them for inspection. It must not be pointed at a live customer database. No API responses are mocked. Traces/videos are disabled for these tests so session credentials are not retained in trace artifacts.
+
+```powershell
+$env:SUPPORTPILOT_LIVE_E2E = '1'
+$env:SUPPORTPILOT_E2E_BASE_URL = 'http://localhost:3000'
+npm run test:e2e --workspace=@supportpilot/web -- --project=desktop --grep 'live:'
+Remove-Item Env:SUPPORTPILOT_LIVE_E2E
+Remove-Item Env:SUPPORTPILOT_E2E_BASE_URL
+```
+
+The base-URL override reuses the explicitly started development frontend and skips the standalone-server preparation. Use port 3000 to match the local API's CORS allowlist. The normal fixture suite remains separate. Neither the fixture suite nor the live suite establishes real AI inference or Redis/BullMQ job completion; those require available services and separate job verification.

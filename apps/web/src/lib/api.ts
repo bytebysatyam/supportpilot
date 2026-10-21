@@ -1,7 +1,7 @@
 import type { Session, SessionUser } from "@supportpilot/types";
 export type { Session, SessionUser } from "@supportpilot/types";
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+  (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1").replace(/\/+$/, "");
 const SESSION_KEY = "supportpilot.session";
 
 export class ApiError extends Error {

@@ -7,6 +7,7 @@ import type { AiAnalysisJob, SlaScanJob } from "../jobs/job.types.js";
 import { processAiAnalysis } from "../ai/ai.worker.service.js";
 import { refreshOpenTicketBreaches } from "../sla/sla.service.js";
 import { enqueueSlaScan } from "../jobs/enqueue.js";
+import { logInfrastructureError } from "../lib/infrastructure-log.js";
 
 const workerConnection = createWorkerConnection();
 const aiWorker = new Worker<AiAnalysisJob>(
@@ -29,9 +30,7 @@ const slaWorker = new Worker<SlaScanJob>(
 
 for (const worker of [aiWorker, slaWorker]) {
   worker.on("error", () =>
-    console.error(
-      JSON.stringify({ event: "worker_error", queue: worker.name }),
-    ),
+    logInfrastructureError("worker_error", worker.name),
   );
   worker.on("failed", (job) =>
     console.error(
@@ -59,11 +58,8 @@ async function shutdown(signal: string) {
 
   // Let in-flight jobs finish before closing their database/queue connections.
   await Promise.all([aiWorker.close(), slaWorker.close()]);
-  await Promise.allSettled([
-    closeQueues(),
-    prisma.$disconnect(),
-    workerConnection.quit(),
-  ]);
+  workerConnection.disconnect();
+  await Promise.allSettled([closeQueues(), prisma.$disconnect()]);
 
   process.exit(0);
 }

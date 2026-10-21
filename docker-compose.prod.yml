@@ -17,7 +17,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     volumes:
       - supportpilot_redis_data:/data
     healthcheck:
@@ -34,10 +34,10 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 4000
-      WEB_ORIGIN: ${WEB_ORIGIN}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
       DATABASE_URL: postgresql://${POSTGRES_USER:-supportpilot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-supportpilot}?schema=public
       REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
       SLA_SCAN_INTERVAL_MS: ${SLA_SCAN_INTERVAL_MS:-300000}
@@ -66,10 +66,10 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 4000
-      WEB_ORIGIN: ${WEB_ORIGIN}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
       DATABASE_URL: postgresql://${POSTGRES_USER:-supportpilot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-supportpilot}?schema=public
       REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
       SLA_SCAN_INTERVAL_MS: ${SLA_SCAN_INTERVAL_MS:-300000}
@@ -87,7 +87,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
     restart: unless-stopped
     depends_on:
       api:

@@ -1,5 +1,10 @@
 # Local setup verification — 20 October 2026
 
+> Historical report. See [current environment verification](environment-verification.md) for the subsequent successful remote development flow and current local/production audit.
+
+
+Historical setup baseline. The later [product verification report](product-verification.md) contains current results.
+
 Environment: Windows, Node.js 22.18.0, npm 10.9.3.
 
 ## Fixes

@@ -3,6 +3,7 @@ import { once } from "node:events";
 import test from "node:test";
 import express from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { errorHandler, requestContext } from "./error.middleware.js";
 
 test("central errors are JSON, carry request IDs, and do not expose internal failures", async () => {
@@ -10,6 +11,12 @@ test("central errors are JSON, carry request IDs, and do not expose internal fai
   app.use(requestContext, express.json());
   app.get("/failure", () => {
     throw new Error("private-database-connection-detail");
+  });
+  app.get("/database-unavailable", () => {
+    throw new Prisma.PrismaClientKnownRequestError("private-database-detail", {
+      code: "P1001",
+      clientVersion: Prisma.prismaVersion.client,
+    });
   });
   app.post("/validate", (req, res) =>
     res.json(z.object({ name: z.string().min(2) }).parse(req.body)),
@@ -27,6 +34,11 @@ test("central errors are JSON, carry request IDs, and do not expose internal fai
     const body = await error.text();
     assert.ok(!body.includes("private-database"));
     assert.ok(!body.includes("stack"));
+    const unavailable = await fetch(base + "/database-unavailable");
+    assert.equal(unavailable.status, 503);
+    const unavailableBody = await unavailable.json() as { error: { code: string } };
+    assert.equal(unavailableBody.error.code, "SERVICE_UNAVAILABLE");
+    assert.ok(!JSON.stringify(unavailableBody).includes("private-database"));
     const validation = await fetch(base + "/validate", {
       method: "POST",
       headers: { "content-type": "application/json" },

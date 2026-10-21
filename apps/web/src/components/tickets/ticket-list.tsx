@@ -71,7 +71,7 @@ export function TicketList({ customer = false }: { customer?: boolean }) {
           <h2>{customer ? "Your requests" : "All tickets"}</h2>
           <p className="muted">
             {data
-              ? `${data.pagination.total} ${customer ? "requests" : "tickets"}`
+              ? `${data.pagination.total} ${customer ? "request" : "ticket"}${data.pagination.total === 1 ? "" : "s"}`
               : "Live ticket queue"}{" "}
             <span aria-hidden="true">·</span> Latest activity first
           </p>
@@ -181,10 +181,7 @@ export function TicketList({ customer = false }: { customer?: boolean }) {
         </EmptyState>
       ) : (
         <>
-          <div
-            className={`ticket-table ${customer ? "customer-table" : ""}`}
-            role="list"
-          >
+          <div className={`ticket-table ${customer ? "customer-table" : ""}`}>
             <div className="ticket-table-heading" aria-hidden="true">
               <span>Ticket</span>
               <span>Status</span>
@@ -198,7 +195,6 @@ export function TicketList({ customer = false }: { customer?: boolean }) {
             </div>
             {data.items.map((ticket) => (
               <Link
-                role="listitem"
                 className="ticket-row"
                 key={ticket.id}
                 href={`${customer ? "/customer/tickets" : "/dashboard/tickets"}/${ticket.id}`}

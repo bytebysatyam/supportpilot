@@ -136,14 +136,27 @@ const fixtures: Fixture[] = [
 
 async function seed() {
   const database = new URL(env.DATABASE_URL);
+  const localDatabase = [
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "postgres",
+  ].includes(database.hostname);
+  const allowRemoteDevelopment = process.argv.includes(
+    "--allow-remote-development",
+  );
   if (
     env.NODE_ENV !== "development" ||
-    !["localhost", "127.0.0.1", "[::1]", "postgres"].includes(database.hostname)
+    (!localDatabase && !allowRemoteDevelopment)
   ) {
     throw new Error(
-      "Seed is restricted to development databases on localhost or the local Compose postgres service.",
+      "Seed requires development mode. Remote development databases also require --allow-remote-development.",
     );
   }
+  if (!localDatabase)
+    console.log(
+      "Explicit remote development seed enabled; existing demo data is preserved.",
+    );
   const passwordHash = await hashPassword("SupportPilot123!");
   const users = [];
   for (const account of accounts) {
@@ -189,61 +202,80 @@ async function seed() {
       fixture.status === "RESOLVED" || fixture.status === "CLOSED"
         ? new Date(createdAt.getTime() + 2 * 3_600_000)
         : null;
-    await prisma.$transaction(async (tx) => {
-      await tx.ticket.create({
-        data: {
-          id,
-          customerId: customer.id,
-          teamId: team.id,
-          assignedAgentId: agent?.id,
-          subject: fixture.subject,
-          description: fixture.description,
-          status: fixture.status,
-          category: fixture.category,
-          priority: fixture.priority,
-          ...deadlines,
-          firstRespondedAt,
-          resolvedAt,
-          closedAt: fixture.status === "CLOSED" ? resolvedAt : null,
-          createdAt,
-          updatedAt: resolvedAt ?? firstRespondedAt ?? createdAt,
-        },
-      });
-      await tx.auditLog.create({
-        data: {
-          ticketId: id,
-          actorId: customer.id,
-          action: "TICKET_CREATED",
-          createdAt,
-          metadata: { subject: fixture.subject, seed: true },
-        },
-      });
-      await tx.sLAEvent.createMany({
-        data: [
-          {
-            ticketId: id,
-            type: "FIRST_RESPONSE_DUE",
-            dueAt: deadlines.firstResponseDueAt,
-            occurredAt: createdAt,
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.ticket.create({
+          data: {
+            id,
+            customerId: customer.id,
+            teamId: team.id,
+            assignedAgentId: agent?.id,
+            subject: fixture.subject,
+            description: fixture.description,
+            status: fixture.status,
+            category: fixture.category,
+            priority: fixture.priority,
+            ...deadlines,
+            firstRespondedAt,
+            resolvedAt,
+            closedAt: fixture.status === "CLOSED" ? resolvedAt : null,
+            createdAt,
+            updatedAt: resolvedAt ?? firstRespondedAt ?? createdAt,
           },
-          {
+        });
+        await tx.auditLog.create({
+          data: {
             ticketId: id,
-            type: "RESOLUTION_DUE",
-            dueAt: deadlines.resolutionDueAt,
-            occurredAt: createdAt,
+            actorId: customer.id,
+            action: "TICKET_CREATED",
+            createdAt,
+            metadata: { subject: fixture.subject, seed: true },
           },
-        ],
-      });
-      if (agent) {
-        const assignedAt = new Date(createdAt.getTime() + 5 * 60_000);
-        if (index === 0) {
+        });
+        await tx.sLAEvent.createMany({
+          data: [
+            {
+              ticketId: id,
+              type: "FIRST_RESPONSE_DUE",
+              dueAt: deadlines.firstResponseDueAt,
+              occurredAt: createdAt,
+            },
+            {
+              ticketId: id,
+              type: "RESOLUTION_DUE",
+              dueAt: deadlines.resolutionDueAt,
+              occurredAt: createdAt,
+            },
+          ],
+        });
+        if (agent) {
+          const assignedAt = new Date(createdAt.getTime() + 5 * 60_000);
+          if (index === 0) {
+            await tx.ticketAssignment.create({
+              data: {
+                ticketId: id,
+                agentId: agent2.id,
+                assignedById: admin.id,
+                assignedAt: createdAt,
+                unassignedAt: assignedAt,
+              },
+            });
+            await tx.auditLog.create({
+              data: {
+                ticketId: id,
+                actorId: admin.id,
+                action: "ASSIGNED",
+                createdAt,
+                metadata: { agentId: agent2.id },
+              },
+            });
+          }
           await tx.ticketAssignment.create({
             data: {
               ticketId: id,
-              agentId: agent2.id,
+              agentId: agent.id,
               assignedById: admin.id,
-              assignedAt: createdAt,
-              unassignedAt: assignedAt,
+              assignedAt,
             },
           });
           await tx.auditLog.create({
@@ -251,89 +283,110 @@ async function seed() {
               ticketId: id,
               actorId: admin.id,
               action: "ASSIGNED",
-              createdAt,
-              metadata: { agentId: agent2.id },
+              createdAt: assignedAt,
+              metadata: {
+                agentId: agent.id,
+                previousAgentId: index === 0 ? agent2.id : null,
+              },
             },
           });
-        }
-        await tx.ticketAssignment.create({
-          data: {
-            ticketId: id,
-            agentId: agent.id,
-            assignedById: admin.id,
-            assignedAt,
-          },
-        });
-        await tx.auditLog.create({
-          data: {
-            ticketId: id,
-            actorId: admin.id,
-            action: "ASSIGNED",
-            createdAt: assignedAt,
-            metadata: {
-              agentId: agent.id,
-              previousAgentId: index === 0 ? agent2.id : null,
-            },
-          },
-        });
-        const note = await tx.ticketMessage.create({
-          data: {
-            ticketId: id,
-            authorId: agent.id,
-            authorType: "AGENT",
-            body: "Review the account history before replying. Keep payment references out of the public conversation.",
-            isInternal: true,
-            createdAt: assignedAt,
-          },
-        });
-        await tx.auditLog.create({ data: { ticketId: id, actorId: agent.id, action: "MESSAGE_ADDED", createdAt: assignedAt, metadata: { messageId: note.id, isInternal: true, authorType: "AGENT" } } });
-        if (fixture.reply && firstRespondedAt) {
-          const reply = await tx.ticketMessage.create({
+          const note = await tx.ticketMessage.create({
             data: {
               ticketId: id,
               authorId: agent.id,
               authorType: "AGENT",
-              body: fixture.reply,
-              createdAt: firstRespondedAt,
+              body: "Review the account history before replying. Keep payment references out of the public conversation.",
+              isInternal: true,
+              createdAt: assignedAt,
             },
           });
-          await tx.auditLog.create({ data: { ticketId: id, actorId: agent.id, action: "MESSAGE_ADDED", createdAt: firstRespondedAt, metadata: { messageId: reply.id, isInternal: false, authorType: "AGENT" } } });
+          await tx.auditLog.create({
+            data: {
+              ticketId: id,
+              actorId: agent.id,
+              action: "MESSAGE_ADDED",
+              createdAt: assignedAt,
+              metadata: {
+                messageId: note.id,
+                isInternal: true,
+                authorType: "AGENT",
+              },
+            },
+          });
+          if (fixture.reply && firstRespondedAt) {
+            const reply = await tx.ticketMessage.create({
+              data: {
+                ticketId: id,
+                authorId: agent.id,
+                authorType: "AGENT",
+                body: fixture.reply,
+                createdAt: firstRespondedAt,
+              },
+            });
+            await tx.auditLog.create({
+              data: {
+                ticketId: id,
+                actorId: agent.id,
+                action: "MESSAGE_ADDED",
+                createdAt: firstRespondedAt,
+                metadata: {
+                  messageId: reply.id,
+                  isInternal: false,
+                  authorType: "AGENT",
+                },
+              },
+            });
+            await tx.sLAEvent.create({
+              data: {
+                ticketId: id,
+                type:
+                  firstRespondedAt <= deadlines.firstResponseDueAt
+                    ? "FIRST_RESPONSE_MET"
+                    : "FIRST_RESPONSE_BREACHED",
+                dueAt: deadlines.firstResponseDueAt,
+                occurredAt: firstRespondedAt,
+              },
+            });
+          }
+        }
+        if (resolvedAt)
           await tx.sLAEvent.create({
             data: {
               ticketId: id,
               type:
-                firstRespondedAt <= deadlines.firstResponseDueAt
-                  ? "FIRST_RESPONSE_MET"
-                  : "FIRST_RESPONSE_BREACHED",
-              dueAt: deadlines.firstResponseDueAt,
-              occurredAt: firstRespondedAt,
+                resolvedAt <= deadlines.resolutionDueAt
+                  ? "RESOLUTION_MET"
+                  : "RESOLUTION_BREACHED",
+              dueAt: deadlines.resolutionDueAt,
+              occurredAt: resolvedAt,
             },
           });
+        if (fixture.status !== "OPEN") {
+          const path: TicketStatus[] = ["OPEN", "IN_PROGRESS"];
+          if (fixture.status === "WAITING_ON_CUSTOMER")
+            path.push("WAITING_ON_CUSTOMER");
+          if (fixture.status === "RESOLVED" || fixture.status === "CLOSED")
+            path.push("RESOLVED");
+          if (fixture.status === "CLOSED") path.push("CLOSED");
+          for (let step = 1; step < path.length; step++) {
+            const to = path[step];
+            await tx.auditLog.create({
+              data: {
+                ticketId: id,
+                actorId: agent?.id ?? admin.id,
+                action: "STATUS_CHANGED",
+                createdAt:
+                  to === "RESOLVED" || to === "CLOSED"
+                    ? resolvedAt!
+                    : new Date(createdAt.getTime() + (6 + step) * 60_000),
+                metadata: { from: path[step - 1]!, to: to!, seed: true },
+              },
+            });
+          }
         }
-      }
-      if (resolvedAt)
-        await tx.sLAEvent.create({
-          data: {
-            ticketId: id,
-            type:
-              resolvedAt <= deadlines.resolutionDueAt
-                ? "RESOLUTION_MET"
-                : "RESOLUTION_BREACHED",
-            dueAt: deadlines.resolutionDueAt,
-            occurredAt: resolvedAt,
-          },
-        });
-      if (fixture.status !== "OPEN") {
-        const path: TicketStatus[] = ["OPEN", "IN_PROGRESS"];
-        if (fixture.status === "WAITING_ON_CUSTOMER") path.push("WAITING_ON_CUSTOMER");
-        if (fixture.status === "RESOLVED" || fixture.status === "CLOSED") path.push("RESOLVED");
-        if (fixture.status === "CLOSED") path.push("CLOSED");
-        for (let step = 1; step < path.length; step++) {
-          const to = path[step];
-          await tx.auditLog.create({ data: { ticketId: id, actorId: agent?.id ?? admin.id, action: "STATUS_CHANGED", createdAt: to === "RESOLVED" || to === "CLOSED" ? resolvedAt! : new Date(createdAt.getTime() + (6 + step) * 60_000), metadata: { from: path[step - 1]!, to: to!, seed: true } } });
-        }
-      }
-    });
+      },
+      { timeout: 30_000 },
+    );
   }
   console.log(
     "Development seed complete. Existing demo records and passwords were preserved. See README for local accounts.",

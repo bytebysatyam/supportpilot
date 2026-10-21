@@ -2,10 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, authorize } from "../middleware/auth.middleware.js";
-import {
-  getTicketSla,
-  refreshOpenTicketBreaches,
-} from "../sla/sla.service.js";
+import { getTicketSla, refreshOpenTicketBreaches } from "../sla/sla.service.js";
 
 export const slaRouter = Router();
 
@@ -45,7 +42,13 @@ slaRouter.get("/tickets/:ticketId", async (req, res) => {
   try {
     const result = await getTicketSla(parsedId.data);
     if (req.auth!.role === "CUSTOMER") {
-      return res.json({ ticketId: result.ticketId, priority: result.priority, status: result.status, firstResponse: result.firstResponse, resolution: result.resolution });
+      return res.json({
+        ticketId: result.ticketId,
+        priority: result.priority,
+        status: result.status,
+        firstResponse: result.firstResponse,
+        resolution: result.resolution,
+      });
     }
     return res.status(200).json(result);
   } catch (error) {

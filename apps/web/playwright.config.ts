@@ -7,8 +7,10 @@ export default defineConfig({
   timeout: 45000,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3001",
-    channel: process.env.PLAYWRIGHT_CHANNEL ?? (process.platform === "win32" ? "msedge" : undefined),
+    baseURL: process.env.SUPPORTPILOT_E2E_BASE_URL ?? "http://127.0.0.1:3001",
+    channel:
+      process.env.PLAYWRIGHT_CHANNEL ??
+      (process.platform === "win32" ? "msedge" : undefined),
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -18,10 +20,13 @@ export default defineConfig({
     { name: "tablet", use: { viewport: { width: 820, height: 1180 } } },
     { name: "mobile", use: { viewport: { width: 390, height: 844 } } },
   ],
-  webServer: {
-    command: "npm run dev -- --port 3001 --hostname 127.0.0.1",
-    url: "http://127.0.0.1:3001/login",
-    reuseExistingServer: false,
-    timeout: 120000,
-  },
+  webServer: process.env.SUPPORTPILOT_E2E_BASE_URL
+    ? undefined
+    : {
+        command: "node .next/standalone/apps/web/server.js",
+        env: { NODE_ENV: "production", PORT: "3001", HOSTNAME: "127.0.0.1" },
+        url: "http://127.0.0.1:3001/login",
+        reuseExistingServer: false,
+        timeout: 120000,
+      },
 });

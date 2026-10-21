@@ -17,11 +17,11 @@ Messages render as text, including AI drafts. There is no HTML rendering of user
 ## SLA policy
 
 | Priority at creation | First response | Resolution |
-| --- | --- | --- |
-| LOW | 8 hours | 72 hours |
-| MEDIUM | 4 hours | 48 hours |
-| HIGH | 1 hour | 24 hours |
-| URGENT | 15 minutes | 4 hours |
+| -------------------- | -------------- | ---------- |
+| LOW                  | 8 hours        | 72 hours   |
+| MEDIUM               | 4 hours        | 48 hours   |
+| HIGH                 | 1 hour         | 24 hours   |
+| URGENT               | 15 minutes     | 4 hours    |
 
 Customer-created requests start with MEDIUM priority. Persisted deadlines are authoritative. Later priority changes affect triage, not the original promise; they are audited and never silently move a deadline.
 

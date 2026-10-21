@@ -55,16 +55,14 @@ export const errorHandler: ErrorRequestHandler = (
   const requestId = res.getHeader("x-request-id");
   const known = error instanceof Error ? knownErrors[error.message] : undefined;
   if (error instanceof ZodError) {
-    res
-      .status(400)
-      .json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Check the submitted fields and try again.",
-          details: error.flatten().fieldErrors,
-          requestId,
-        },
-      });
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Check the submitted fields and try again.",
+        details: error.flatten().fieldErrors,
+        requestId,
+      },
+    });
     return;
   }
   if (known && error instanceof Error) {
@@ -74,15 +72,13 @@ export const errorHandler: ErrorRequestHandler = (
     return;
   }
   if (error instanceof SyntaxError && "body" in error) {
-    res
-      .status(400)
-      .json({
-        error: {
-          code: "INVALID_JSON",
-          message: "Request body must be valid JSON.",
-          requestId,
-        },
-      });
+    res.status(400).json({
+      error: {
+        code: "INVALID_JSON",
+        message: "Request body must be valid JSON.",
+        requestId,
+      },
+    });
     return;
   }
   if (
@@ -90,18 +86,19 @@ export const errorHandler: ErrorRequestHandler = (
     "type" in error &&
     error.type === "entity.too.large"
   ) {
-    res
-      .status(413)
-      .json({
-        error: {
-          code: "PAYLOAD_TOO_LARGE",
-          message: "Request body is too large.",
-          requestId,
-        },
-      });
+    res.status(413).json({
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "Request body is too large.",
+        requestId,
+      },
+    });
     return;
   }
-  const unavailable = error instanceof Prisma.PrismaClientInitializationError;
+  const unavailable =
+    error instanceof Prisma.PrismaClientInitializationError ||
+    (error instanceof Prisma.PrismaClientKnownRequestError &&
+      ["P1001", "P1002", "P1008", "P1017"].includes(error.code));
   // Deliberately omit raw DB/provider errors, which may contain connection details.
   console.error(
     JSON.stringify({

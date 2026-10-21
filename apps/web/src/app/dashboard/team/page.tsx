@@ -69,7 +69,8 @@ export default function TeamPage() {
         </section>
       )}
       <p className="field-help">
-        Workload includes open, in-progress, and waiting tickets. Resolved and closed tickets are excluded.
+        Workload includes open, in-progress, and waiting tickets. Resolved and
+        closed tickets are excluded.
       </p>
     </>
   );

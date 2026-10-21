@@ -3,8 +3,9 @@ import { env } from "./config/env.js";
 import { closeQueues } from "./jobs/queues.js";
 import { prisma } from "./lib/prisma.js";
 
-const server = app.listen(env.API_PORT, () => {
-  console.log(`SupportPilot API listening on http://localhost:${env.API_PORT}`);
+const port = env.PORT ?? env.API_PORT;
+const server = app.listen(port, "0.0.0.0", () => {
+  console.log(`SupportPilot API listening on port ${port}`);
 });
 
 async function shutdown(signal: string) {

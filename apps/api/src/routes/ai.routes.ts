@@ -21,14 +21,12 @@ aiRouter.post("/tickets/:ticketId/analyze", async (req, res) => {
   const id = z.string().cuid().safeParse(req.params.ticketId);
   const body = aiRunSchema.safeParse(req.body);
   if (!id.success || !body.success)
-    return res
-      .status(400)
-      .json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Invalid analysis request.",
-        },
-      });
+    return res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid analysis request.",
+      },
+    });
   return res
     .status(202)
     .json(
@@ -42,11 +40,9 @@ aiRouter.post("/tickets/:ticketId/analyze", async (req, res) => {
 aiRouter.get("/tickets/:ticketId/analyses", async (req, res) => {
   const id = z.string().cuid().safeParse(req.params.ticketId);
   if (!id.success)
-    return res
-      .status(400)
-      .json({
-        error: { code: "VALIDATION_ERROR", message: "Invalid ticket id." },
-      });
+    return res.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "Invalid ticket id." },
+    });
   return res.json(
     await listTicketAiAnalyses(
       { userId: req.auth!.userId, role: req.auth!.role },

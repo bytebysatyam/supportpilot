@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "pretest:e2e": "node scripts/prepare-browser-tests.mjs"
   },
   "dependencies": {
     "@supportpilot/types": "0.1.0",
