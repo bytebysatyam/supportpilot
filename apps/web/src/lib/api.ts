@@ -9,6 +9,7 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
+    readonly fieldErrors: Record<string, string[]> = {},
   ) {
     super(message);
   }
@@ -63,14 +64,24 @@ export function clearSession() {
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
   const body = (await response.json().catch(() => null)) as {
-    error?: { message?: string; code?: string };
+    error?: { message?: string; code?: string; details?: unknown };
   } | null;
-  if (!response.ok)
+  if (!response.ok) {
+    const fieldErrors: Record<string, string[]> = {};
+    const details = body?.error?.details;
+    if (details && typeof details === "object") {
+      for (const [field, messages] of Object.entries(details)) {
+        if (Array.isArray(messages) && messages.every(message => typeof message === "string"))
+          fieldErrors[field] = messages;
+      }
+    }
     throw new ApiError(
       body?.error?.message ?? "The service could not complete this request.",
       response.status,
       body?.error?.code ?? "REQUEST_FAILED",
+      fieldErrors,
     );
+  }
   return body as T;
 }
 async function publicRequest<T>(path: string, body: unknown): Promise<T> {

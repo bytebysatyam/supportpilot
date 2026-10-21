@@ -143,3 +143,7 @@ Implemented features are listed above; local execution results and blockers are 
 No production deployment, traffic, uptime, or scale claim is made. The next release work is to verify migrations and real flows, review dependency advisories, and add operational controls before a public deployment.
 
 [API reference](docs/api.md) · [OpenAPI](docs/openapi.yaml) · [Architecture](docs/architecture.md) · [Testing](docs/testing.md)
+
+## AI provider configuration
+
+Gemini and Groq use the existing BullMQ worker and validated structured outputs. Select `AI_PROVIDER=disabled|gemini|groq`; no automatic fallback is performed. Gemini defaults to the verified stable `gemini-3.5-flash-lite`. Keys remain server-side and replies require human review. See [AI setup and live verification](docs/ai-providers.md). For the existing single Render Web Service, `npm run start:combined --workspace=@supportpilot/api` starts both API and worker with the same injected environment. Separate process commands remain available.

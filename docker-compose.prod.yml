@@ -9,7 +9,11 @@ services:
     volumes:
       - supportpilot_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-supportpilot} -d ${POSTGRES_DB:-supportpilot}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-supportpilot} -d ${POSTGRES_DB:-supportpilot}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -17,7 +21,14 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory-policy",
+        "noeviction",
+      ]
     volumes:
       - supportpilot_redis_data:/data
     healthcheck:
@@ -42,6 +53,8 @@ services:
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
       SLA_SCAN_INTERVAL_MS: ${SLA_SCAN_INTERVAL_MS:-300000}
       AI_PROVIDER: ${AI_PROVIDER:-disabled}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
     depends_on:
@@ -74,6 +87,8 @@ services:
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
       SLA_SCAN_INTERVAL_MS: ${SLA_SCAN_INTERVAL_MS:-300000}
       AI_PROVIDER: ${AI_PROVIDER:-disabled}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
     depends_on:

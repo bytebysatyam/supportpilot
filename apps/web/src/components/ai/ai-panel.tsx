@@ -8,6 +8,7 @@ import {
   type TicketPriority,
 } from "@supportpilot/types";
 import { api, errorMessage } from "../../lib/api";
+import { aiFailureMessage } from "../../lib/ai-errors";
 import { formatDate, label } from "../../lib/format";
 import { EmptyState, ErrorState, Loading } from "../ui/states";
 
@@ -148,14 +149,14 @@ export function AiPanel({
             <time className="field-help">{formatDate(analysis.createdAt)}</time>
             {analysis.status === "PENDING" && (
               <p className="muted" role="status">
-                Queued for background processing. This panel updates
-                automatically.
+                {analysis.errorMessage
+                  ? `Retry pending. ${aiFailureMessage(analysis.errorMessage)}`
+                  : "Queued or processing in the background. This panel updates automatically."}
               </p>
             )}
             {analysis.status === "FAILED" && (
               <p className="notice notice-error">
-                The analysis could not finish. Check provider and worker
-                availability, then request it again.
+                {aiFailureMessage(analysis.errorMessage)}
               </p>
             )}
             {analysis.status === "COMPLETED" && analysis.result && (

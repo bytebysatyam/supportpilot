@@ -11,6 +11,7 @@
     "dev:web": "npm run dev --workspace=@supportpilot/web",
     "dev:api": "npm run dev --workspace=@supportpilot/api",
     "dev:worker": "npm run dev:worker --workspace=@supportpilot/api",
+    "start:combined": "npm run start:combined --workspace=@supportpilot/api",
     "db:generate": "npm run db:generate --workspace=@supportpilot/api",
     "db:migrate": "npm run db:migrate --workspace=@supportpilot/api --",
     "db:deploy": "npm run db:deploy --workspace=@supportpilot/api",

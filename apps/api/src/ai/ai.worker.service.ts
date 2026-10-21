@@ -9,6 +9,7 @@ import {
 import { getAiProvider } from "./provider.factory.js";
 import type { AiAnalysisJob } from "../jobs/job.types.js";
 import { lockTicket } from "../tickets/ticket.policy.js";
+import { safeAiErrorCode } from "./provider.errors.js";
 
 export function validateResult(type: AiAnalysisJob["type"], raw: unknown) {
   switch (type) {
@@ -23,7 +24,10 @@ export function validateResult(type: AiAnalysisJob["type"], raw: unknown) {
   }
 }
 
-export async function processAiAnalysis(job: AiAnalysisJob) {
+export async function processAiAnalysis(
+  job: AiAnalysisJob,
+  options = { finalAttempt: true },
+) {
   const analysis = await prisma.aIAnalysis.findUnique({
     where: { id: job.analysisId },
     select: {
@@ -31,6 +35,8 @@ export async function processAiAnalysis(job: AiAnalysisJob) {
       status: true,
       ticketId: true,
       type: true,
+      provider: true,
+      model: true,
     },
   });
 
@@ -79,6 +85,11 @@ export async function processAiAnalysis(job: AiAnalysisJob) {
       data: { status: "PENDING", errorMessage: null, completedAt: null },
     });
     const provider = getAiProvider();
+    if (
+      analysis.provider &&
+      (analysis.provider !== provider.name || analysis.model !== provider.model)
+    )
+      throw new Error("AI_PROVIDER_CONFIGURATION_CHANGED");
     const generated = await provider.run(job.type, ticket);
     const result = validateResult(job.type, generated.raw);
 
@@ -118,18 +129,17 @@ export async function processAiAnalysis(job: AiAnalysisJob) {
       return completed;
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "AI_ANALYSIS_FAILED";
+    const message = safeAiErrorCode(error);
 
     await prisma.aIAnalysis.updateMany({
       where: { id: analysis.id, status: { not: "COMPLETED" } },
       data: {
-        status: "FAILED",
-        errorMessage: message.slice(0, 1000),
-        completedAt: new Date(),
+        status: options.finalAttempt ? "FAILED" : "PENDING",
+        errorMessage: message,
+        completedAt: options.finalAttempt ? new Date() : null,
       },
     });
 
-    throw error;
+    throw new Error(message);
   }
 }

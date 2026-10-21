@@ -69,3 +69,28 @@ test("sign-in renders service errors and lets the user retry", async ({
   ).toBeEnabled();
   await expectNoOverflow(page);
 });
+
+test("registration shows field validation details and focuses the invalid field", async ({ page }) => {
+  // UI contract only: backend validation rules remain authoritative.
+  await page.route("**/api/v1/auth/register", route => route.fulfill({
+    status: 400,
+    contentType: "application/json",
+    body: JSON.stringify({ error: {
+      code: "VALIDATION_ERROR",
+      message: "Check the submitted fields and try again.",
+      details: { password: ["Password must include an uppercase letter", "Password must include a number"] },
+    } }),
+  }));
+  await page.goto("/register");
+  await page.getByLabel("Full name", { exact: true }).fill("Validation QA");
+  await page.getByLabel("Email address", { exact: true }).fill("validation@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("lowercaseonly");
+  await page.getByRole("button", { name: "Create customer account" }).click();
+  const password = page.getByLabel("Password", { exact: true });
+  await expect(password).toBeFocused();
+  await expect(password).toHaveAttribute("aria-invalid", "true");
+  await expect(password).toHaveAccessibleDescription(/Password must include an uppercase letter/);
+  await expect(page.locator("#password-error")).toHaveText("Password must include an uppercase letter Password must include a number");
+  await expect(page.getByRole("button", { name: "Create customer account" })).toBeEnabled();
+  await expectNoOverflow(page);
+});

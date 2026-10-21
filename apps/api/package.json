@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "start:worker": "node dist/workers/worker.js",
+    "start:combined": "node dist/start.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test src/**/*.test.ts",
     "db:generate": "prisma generate",

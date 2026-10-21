@@ -166,6 +166,112 @@ test("staff ticket exposes notes and properties while disabled AI has an explici
   await noOverflow(page);
 });
 
+test("AI results remain structured, failures are readable, and drafts need human review", async ({
+  page,
+}) => {
+  await workspace(page, true);
+  const analyses = [
+    {
+      id: "ai-1",
+      type: "CLASSIFICATION",
+      status: "COMPLETED",
+      result: {
+        category: "TECHNICAL",
+        confidence: 0.9,
+        rationale: "Export error reported.",
+      },
+    },
+    {
+      id: "ai-2",
+      type: "SUMMARY",
+      status: "COMPLETED",
+      result: {
+        summary: "A large export fails.",
+        keyPoints: ["Small exports work."],
+      },
+    },
+    {
+      id: "ai-3",
+      type: "PRIORITY_SUGGESTION",
+      status: "COMPLETED",
+      result: {
+        priority: "HIGH",
+        confidence: 0.8,
+        rationale: "Export workflow blocked.",
+      },
+    },
+    {
+      id: "ai-4",
+      type: "DRAFT_RESPONSE",
+      status: "COMPLETED",
+      result: {
+        response: "Could you share the export date range?",
+        tone: "professional",
+      },
+    },
+    {
+      id: "ai-5",
+      type: "SUMMARY",
+      status: "FAILED",
+      result: null,
+      errorMessage: "AI_PROVIDER_RATE_LIMITED",
+    },
+    {
+      id: "ai-6",
+      type: "SUMMARY",
+      status: "PENDING",
+      result: null,
+      errorMessage: "AI_PROVIDER_UNAVAILABLE",
+    },
+  ].map((item) => ({
+    ...item,
+    provider: "gemini",
+    model: "gemini-3.5-flash-lite",
+    createdAt: ticket.createdAt,
+  }));
+  await page.route("**/api/v1/ai/capabilities", (route) =>
+    route.fulfill({ json: { enabled: true, provider: "gemini" } }),
+  );
+  await page.route(`**/api/v1/ai/tickets/${ticket.id}/analyses`, (route) =>
+    route.fulfill({ json: analyses }),
+  );
+  let messagePosts = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/messages"))
+      messagePosts++;
+  });
+  await page.goto(`/dashboard/tickets/${ticket.id}`);
+  await expect(
+    page.getByText("Export error reported.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("A large export fails.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Apply category" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Apply priority" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "The AI provider is rate-limited. Wait a little before trying again.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /Retry pending\. The AI provider is temporarily unavailable/,
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Use in reply editor" }).click();
+  await expect(page.getByLabel("Reply", { exact: true })).toHaveValue(
+    "Could you share the export date range?",
+  );
+  expect(messagePosts).toBe(0);
+  await noOverflow(page);
+});
+
 test("customer ticket renders public conversation without staff controls", async ({
   page,
 }) => {

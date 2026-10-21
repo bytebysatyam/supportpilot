@@ -100,7 +100,9 @@ Health Check Path: `/api/v1/health`. Deploy the API/migrations before the worker
 
 ## Render worker and Redis
 
-Use a separate Node Background Worker, repository root, and the same private backend variables, database and Redis as the API. Do not deploy the worker as a Vercel function or start it inside the API process.
+For your current single Render Web Service, use `npm run start:combined --workspace=@supportpilot/api` as the start command. The launcher forks API and worker as separate Node processes with identical inherited environment variables, forwards termination signals, and stops the service if either process exits unexpectedly. It allows up to 60 seconds for shutdown before forcing termination; align Render?s shutdown grace period accordingly. Both processes use the same injected provider variables and REDIS_URL. The standard API-only `start` command remains available.
+
+Alternatively, run a separate Node Background Worker with the same private backend variables, database and Redis as the API and use the commands below. Choose one worker topology; do not enable both combined and separate workers unintentionally. Do not deploy the worker as a Vercel function.
 
 Worker build:
 
@@ -117,6 +119,10 @@ npm run start:worker --workspace=@supportpilot/api
 Both processes use `REDIS_URL`; `rediss://` enables TLS through ioredis. Do not disable certificate verification. Producers fail promptly when Redis is unavailable; worker connections retry as BullMQ requires. These settings do not establish provider availability or job completion.
 
 Set the Redis provider's `maxmemory-policy` to `noeviction`. Policies such as `allkeys-lru` can evict BullMQ job/lock metadata and undermine queue reliability. If the provider cannot supply `noeviction`, treat that as an unresolved production queue blocker. Check this setting in Render/provider controls or with an authorized read-only `CONFIG GET maxmemory-policy`; no provider setting has been changed automatically. The included local/production Docker Redis services explicitly use `noeviction` and append-only persistence.
+
+## Gemini and Groq
+
+See [AI provider configuration and verification](ai-providers.md) for the verified Gemini model, server-only variables, provider selection, failure handling and exact live test steps. Keep AI disabled until a real provider key and functioning PostgreSQL/Redis are available.
 
 ## CORS
 

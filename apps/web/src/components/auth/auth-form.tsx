@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ApiError,
   errorMessage,
   homeFor,
   loadSession,
@@ -16,6 +17,7 @@ import { ErrorState } from "../ui/states";
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [offlineLogout, setOfflineLogout] = useState(false);
   const registering = mode === "register";
@@ -29,8 +31,10 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
     setBusy(true);
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     try {
       const email = String(data.get("email"));
       const password = String(data.get("password"));
@@ -40,7 +44,16 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       saveSession(session);
       router.replace(homeFor(session.user));
     } catch (err) {
-      setError(errorMessage(err));
+      if (err instanceof ApiError && err.code === "VALIDATION_ERROR" &&
+          ["name", "email", "password"].some(field => err.fieldErrors[field]?.length)) {
+        setFieldErrors(err.fieldErrors);
+        setError("Please correct the highlighted fields.");
+        const field = ["name", "email", "password"].find(key => err.fieldErrors[key]?.length);
+        const input = field ? form.elements.namedItem(field) : null;
+        if (input instanceof HTMLElement) input.focus();
+      } else {
+        setError(errorMessage(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -113,9 +126,14 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                   maxLength={80}
                   required
                   placeholder="Your name"
+                  aria-invalid={Boolean(fieldErrors.name?.length)}
+                  aria-describedby={fieldErrors.name?.length ? "name-error" : undefined}
                 />
               </label>
             )}
+            {registering && fieldErrors.name?.length ? (
+              <p id="name-error" className="field-help">{fieldErrors.name.join(" ")}</p>
+            ) : null}
             <label>
               Email address
               <input
@@ -124,8 +142,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 autoComplete="email"
                 required
                 placeholder="you@example.com"
+                aria-invalid={Boolean(fieldErrors.email?.length)}
+                aria-describedby={fieldErrors.email?.length ? "email-error" : undefined}
               />
             </label>
+            {fieldErrors.email?.length ? (
+              <p id="email-error" className="field-help">{fieldErrors.email.join(" ")}</p>
+            ) : null}
             <label>
               Password
               <input
@@ -135,9 +158,16 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
                 minLength={registering ? 8 : 1}
                 maxLength={72}
                 required
-                aria-describedby={registering ? "password-help" : undefined}
+                aria-invalid={Boolean(fieldErrors.password?.length)}
+                aria-describedby={[
+                  registering ? "password-help" : "",
+                  fieldErrors.password?.length ? "password-error" : "",
+                ].filter(Boolean).join(" ") || undefined}
               />
             </label>
+            {fieldErrors.password?.length ? (
+              <p id="password-error" className="field-help">{fieldErrors.password.join(" ")}</p>
+            ) : null}
             {registering && (
               <p id="password-help" className="field-help">
                 Use 8 or more characters, including uppercase, lowercase, and a

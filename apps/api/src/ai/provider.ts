@@ -17,5 +17,10 @@ export type AiProviderResult = {
 };
 
 export interface AiProvider {
-  run(type: AIAnalysisType, context: TicketAiContext): Promise<AiProviderResult>;
+  readonly name: "groq" | "gemini";
+  readonly model: string;
+  run(
+    type: AIAnalysisType,
+    context: TicketAiContext,
+  ): Promise<AiProviderResult>;
 }

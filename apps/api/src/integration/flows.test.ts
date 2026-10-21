@@ -13,7 +13,7 @@ test(
       : "Set SUPPORTPILOT_TEST_DATABASE_URL to a migrated local *_test database to run database integration tests.",
     timeout: 60000,
   },
-  async () => {
+  async (t) => {
     if (!testDatabase) return;
     const url = new URL(testDatabase);
     assert.ok(
@@ -328,6 +328,93 @@ test(
         ).status,
         "FAILED",
       );
+      // Real PostgreSQL persistence with external Gemini HTTP mocked, never a paid/live inference call.
+      const { env } = await import("../config/env.js");
+      const originalProvider = env.AI_PROVIDER;
+      const originalKey = env.GEMINI_API_KEY;
+      const originalModel = env.GEMINI_MODEL;
+      const originalFetch = globalThis.fetch;
+      let rateLimited = true;
+      const providerHttp = t.mock.method(
+        globalThis,
+        "fetch",
+        async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          if (
+            String(input).startsWith(
+              "https://generativelanguage.googleapis.com/",
+            )
+          ) {
+            if (rateLimited)
+              return Response.json(
+                { error: { message: "synthetic provider limit" } },
+                { status: 429 },
+              );
+            return Response.json({
+              candidates: [
+                {
+                  finishReason: "STOP",
+                  content: {
+                    parts: [
+                      {
+                        text: JSON.stringify({
+                          summary: "Synthetic Gemini summary",
+                          keyPoints: ["Customer needs help."],
+                        }),
+                      },
+                    ],
+                  },
+                },
+              ],
+            });
+          }
+          return originalFetch(input, init);
+        },
+      );
+      try {
+        env.AI_PROVIDER = "gemini";
+        env.GEMINI_API_KEY = "synthetic-integration-key";
+        const geminiAnalysis = await prisma.aIAnalysis.create({
+          data: {
+            ticketId: ticket.id,
+            type: "SUMMARY",
+            provider: "gemini",
+            model: env.GEMINI_MODEL,
+          },
+        });
+        const job = {
+          analysisId: geminiAnalysis.id,
+          ticketId: ticket.id,
+          actorId: agent.id,
+          type: "SUMMARY" as const,
+        };
+        await assert.rejects(
+          () => processAiAnalysis(job, { finalAttempt: false }),
+          /AI_PROVIDER_RATE_LIMITED/,
+        );
+        const retrying = await prisma.aIAnalysis.findUniqueOrThrow({
+          where: { id: geminiAnalysis.id },
+        });
+        assert.equal(retrying.status, "PENDING");
+        assert.equal(retrying.errorMessage, "AI_PROVIDER_RATE_LIMITED");
+        assert.equal(retrying.completedAt, null);
+        rateLimited = false;
+        await processAiAnalysis(job);
+        const completed = await prisma.aIAnalysis.findUniqueOrThrow({
+          where: { id: geminiAnalysis.id },
+        });
+        assert.equal(completed.status, "COMPLETED");
+        assert.equal(completed.provider, "gemini");
+        assert.equal(completed.errorMessage, null);
+        assert.deepEqual(completed.result, {
+          summary: "Synthetic Gemini summary",
+          keyPoints: ["Customer needs help."],
+        });
+      } finally {
+        providerHttp.mock.restore();
+        env.AI_PROVIDER = originalProvider;
+        env.GEMINI_API_KEY = originalKey;
+        env.GEMINI_MODEL = originalModel;
+      }
       const rotations = await Promise.all(
         [1, 2].map(() =>
           request("/auth/refresh", "POST", undefined, {

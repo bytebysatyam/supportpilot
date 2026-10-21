@@ -12,7 +12,10 @@ import { logInfrastructureError } from "../lib/infrastructure-log.js";
 const workerConnection = createWorkerConnection();
 const aiWorker = new Worker<AiAnalysisJob>(
   AI_QUEUE_NAME,
-  async (job) => processAiAnalysis(job.data),
+  async (job) =>
+    processAiAnalysis(job.data, {
+      finalAttempt: job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+    }),
   {
     connection: workerConnection,
     concurrency: 3,
@@ -29,9 +32,7 @@ const slaWorker = new Worker<SlaScanJob>(
 );
 
 for (const worker of [aiWorker, slaWorker]) {
-  worker.on("error", () =>
-    logInfrastructureError("worker_error", worker.name),
-  );
+  worker.on("error", () => logInfrastructureError("worker_error", worker.name));
   worker.on("failed", (job) =>
     console.error(
       JSON.stringify({
