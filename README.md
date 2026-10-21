@@ -1,67 +1,128 @@
-﻿# SupportPilot
+# SupportPilot
 
-A support workspace for customers to raise requests and for teams to triage, respond, assign ownership, and track response deadlines. AI helps agents understand a conversation and prepare a reply; people decide what changes and what gets sent.
+AI-assisted customer support and ticket operations platform built with Next.js, Express, PostgreSQL, Prisma, Redis/BullMQ, and Gemini/Groq.
 
-## Product
+**Live demo:** https://supportpilot-silk.vercel.app  
+**API:** https://supportpilot-4br7.onrender.com  
+**Health:** https://supportpilot-4br7.onrender.com/api/v1/health
 
-- **Customers:** register, sign in, create requests, follow ticket progress, reply to support, and see response targets. Internal notes and staff activity remain private.
-- **Agents:** search and paginate the queue, manage status/priority/category, assign or reassign tickets, write public replies and internal notes, and review ownership and audit history.
-- **Administrators:** use the support workspace plus a staff directory with active workload counts.
-- **Operations:** database-wide active-ticket metrics, priority-based SLA targets, and background breach scanning.
-- **AI assistance:** asynchronous classification, summaries, priority suggestions, and draft responses. Suggestions require an explicit action; drafts enter an editable composer before sending. Disabled AI has a clear unavailable state.
+SupportPilot gives customers a simple support portal while giving support teams a production-style workspace for triage, ownership, SLA tracking, conversations, audit history, and human-reviewed AI assistance.
 
-The application uses PostgreSQL for all business records. There is no mock-data mode in the application. Browser rendering tests use synthetic API fixtures separately from the real database integration suite.
+## What it does
+
+### Customer portal
+- Register and sign in
+- Create support requests
+- Track ticket status, priority, category, and response targets
+- Continue the public conversation with support
+- View resolved requests and support replies
+- Never see internal notes or staff-only activity
+
+### Agent and admin workspace
+- Search and paginate the ticket queue
+- Assign and reassign tickets
+- Update status, priority, and category
+- Send public replies and add private internal notes
+- Review assignment and audit history
+- Track first-response and resolution SLA targets
+- View database-backed operational metrics
+- Admin staff/workload directory
+
+### AI assistance
+- Ticket classification
+- Conversation summary
+- Priority suggestion
+- Draft response
+- Gemini and Groq provider support
+- BullMQ background processing
+- Strict structured-output validation
+- Human review before applying any suggestion or sending any draft
+
+AI is intentionally a **support copilot**, not an autonomous customer-facing bot.
+
+## Production status
+
+The current deployment has been exercised end-to-end with real application data paths:
+
+- customer registration and login
+- ticket creation and persisted ticket detail
+- admin login and staff workspace
+- assignment/status workflow
+- public reply and internal note separation
+- SLA state updates
+- ticket resolution
+- Gemini-backed classification, summary, priority suggestion, and draft reply
+- API + BullMQ worker running together on the current Render Web Service
+
+This verifies the deployed product flow; it is **not** a claim of production scale, uptime, or security certification.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  Browser --> Web[Next.js web]
-  Web --> API[Express API]
+  Browser --> Web[Next.js / Vercel]
+  Web --> API[Express API / Render]
   API --> DB[(PostgreSQL / Prisma)]
   API --> Queue[(Redis / BullMQ)]
-  Queue --> Worker[AI and SLA workers]
+  Queue --> Worker[Background worker]
   Worker --> DB
-  Worker --> Provider[Replaceable AI provider]
+  Worker --> AI[Gemini or Groq]
 ```
 
-TypeScript is strict throughout. Express owns validation and authorization; Prisma transactions protect ticket edits and their history. The API persists pending AI analyses before enqueueing work. Workers run independently of the web and API processes.
+| Location | Responsibility |
+| --- | --- |
+| `apps/web` | Next.js/React frontend and shared workspace components |
+| `apps/api` | Express API, auth/RBAC, ticket services, Prisma, AI providers, BullMQ workers |
+| `packages/types` | Shared frontend/domain contracts |
+| `docs` | Architecture, API, deployment, testing, AI provider, and verification notes |
 
-| Location         | Responsibility                                                           |
-| ---------------- | ------------------------------------------------------------------------ |
-| `apps/web`       | Next.js / React frontend, reusable ticket and workspace components       |
-| `apps/api`       | Express, auth/RBAC, ticket services, Prisma schema, seed, BullMQ workers |
-| `packages/types` | Shared frontend contracts and domain values                              |
-| `docs`           | API, architecture, testing, deployment, and verification notes           |
+**Stack:** Node.js 22+, TypeScript, Next.js 15, React 19, Express 5, Prisma 6, PostgreSQL, Redis, BullMQ, Zod, Docker, GitHub Actions.
 
-Stack: Node.js 22+, npm workspaces, Next.js 15, React 19, Express 5, Prisma 6, PostgreSQL 17, Redis 7, BullMQ, Zod, Docker, GitHub Actions.
+## Core workflow
+
+```text
+Customer
+  -> creates ticket
+  -> PostgreSQL persists request
+  -> support team receives it
+  -> agent/admin assigns and responds
+  -> SLA state is tracked
+  -> AI can classify/summarize/suggest/draft
+  -> human reviews and applies changes
+  -> ticket is resolved
+```
+
+## AI workflow
+
+```text
+Staff action
+  -> API creates PENDING AIAnalysis
+  -> BullMQ queues job in Redis
+  -> worker selects configured provider
+  -> Gemini or Groq returns structured output
+  -> Zod validates result
+  -> PostgreSQL stores result
+  -> UI renders advisory action
+  -> human explicitly applies or sends
+```
+
+Internal notes are excluded from provider prompts. Raw provider errors and credentials are not returned to the browser.
 
 ## Run locally
 
-Requires Node.js 22+, npm, and running PostgreSQL/Redis. Docker Desktop is the simplest way to start the included services.
+Requirements: Node.js 22+, npm, PostgreSQL, and Redis. Docker Desktop is the simplest way to run the local services.
 
-From the repository root in PowerShell:
+From the repository root:
 
 ```powershell
-npm install
+npm ci
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
 node -p "require('node:crypto').randomBytes(48).toString('hex')"
 ```
 
-Put that generated development-only value in `JWT_ACCESS_SECRET` in your existing `.env`. Keep other settings and never commit this file. The API, Prisma CLI, and Next.js load root defaults while preserving injected variables and workspace overrides.
+Put the generated value in `JWT_ACCESS_SECRET` inside the private `.env`.
 
-The example uses:
-
-```env
-DATABASE_URL=postgresql://supportpilot:supportpilot@localhost:5432/supportpilot?schema=public
-REDIS_URL=redis://localhost:6379
-API_PORT=4000
-WEB_ORIGIN=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
-AI_PROVIDER=disabled
-```
-
-Then, for a fresh development database:
+Start local services and prepare the database:
 
 ```powershell
 docker compose up -d postgres redis
@@ -70,11 +131,7 @@ npm run db:deploy
 npm run db:seed
 ```
 
-The real initial migration is included under `apps/api/prisma/migrations` and has been applied to the configured development PostgreSQL database. Use `npm run db:deploy` for an empty database; use `db:migrate` when developing schema changes. Do not reset an existing database to bypass a migration error. The schema adds a unique ticket/type SLA event constraint; existing installations must review any duplicate events before applying it.
-
-Stop API/worker processes before Prisma generation on Windows if its engine DLL is locked. Development uses `.next-dev`; production builds and standalone browser checks use `.next`, so the two processes do not overwrite each other.
-
-Start each process in a separate terminal:
+Run the application in separate terminals:
 
 ```powershell
 npm run dev:api
@@ -82,33 +139,68 @@ npm run dev:worker
 npm run dev:web
 ```
 
+Local endpoints:
+
 - Web: http://localhost:3000
-- API: http://localhost:4000/api/v1
-- Liveness: http://localhost:4000/api/v1/health
+- API base: http://localhost:4000/api/v1
+- Health: http://localhost:4000/api/v1/health
 
-The health route does not prove database/Redis readiness.
+## Local development accounts
 
-## Development accounts
+Available only after `npm run db:seed` succeeds. These are synthetic local accounts and are not intended for production use.
 
-Available **only after `npm run db:seed` succeeds**. Password for newly seeded accounts: **`SupportPilot123!`**. These are synthetic local accounts; never seed them into production.
+Password for newly seeded accounts: `SupportPilot123!`
 
-| Role          | Email                          |
-| ------------- | ------------------------------ |
-| Admin         | `admin@supportpilot.local`     |
-| Support agent | `agent1@supportpilot.local`    |
-| Support agent | `agent2@supportpilot.local`    |
-| Customer      | `customer1@supportpilot.local` |
-| Customer      | `customer2@supportpilot.local` |
+| Role | Email |
+| --- | --- |
+| Admin | `admin@supportpilot.local` |
+| Support agent | `agent1@supportpilot.local` |
+| Support agent | `agent2@supportpilot.local` |
+| Customer | `customer1@supportpilot.local` |
+| Customer | `customer2@supportpilot.local` |
 
-The seed uses the existing bcrypt implementation, creates a team and eight realistic support requests, and includes assignment history, public replies, internal notes, audit records, and varied SLA scenarios. Re-running it preserves existing demo tickets and passwords. It refuses non-development environments. A remote development database requires explicit opt-in: `npm run db:seed -- --allow-remote-development`. It does not delete data.
+## Environment configuration
 
-## Routes
+Local defaults are documented in `.env.example`. Production secrets belong in Render/Vercel environment settings, never in Git.
 
-`/login`, `/register`, `/customer` → `/customer/tickets`, `/customer/tickets/new`, `/customer/tickets/[id]`, `/dashboard`, `/dashboard/tickets/[id]`, `/dashboard/team` (admin).
+Frontend:
 
-Authentication redirects are a navigation convenience. Every protected API request checks the current account and its role server-side.
+```dotenv
+NEXT_PUBLIC_API_URL=https://supportpilot-4br7.onrender.com/api/v1
+```
 
-## Checks
+Render API/worker:
+
+```dotenv
+NODE_ENV=production
+WEB_ORIGIN=https://supportpilot-silk.vercel.app
+DATABASE_URL=<private PostgreSQL URL>
+REDIS_URL=<private Redis URL>
+JWT_ACCESS_SECRET=<private random secret>
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<private key>
+GEMINI_MODEL=gemini-3.5-flash-lite
+```
+
+Groq remains available by switching `AI_PROVIDER=groq` and configuring the Groq key/model. There is no silent provider fallback.
+
+## Render deployment
+
+Build command:
+
+```sh
+npm ci --include=dev && npm run db:generate --workspace=@supportpilot/api && npm run db:deploy --workspace=@supportpilot/api && npm run build --workspace=@supportpilot/api
+```
+
+Current single-service start command:
+
+```sh
+npm run start:combined --workspace=@supportpilot/api
+```
+
+The combined launcher supervises both the Express API and BullMQ worker in the same Render service. Separate process commands remain available for local development, Docker, or a future dedicated worker service.
+
+## Verification commands
 
 ```powershell
 npm run db:generate
@@ -119,31 +211,38 @@ npm run build
 npm run test:e2e
 ```
 
-The API suite includes an opt-in integration test requiring a dedicated local `*_test` database. CI prepares the schema in its disposable PostgreSQL service and runs that test. See [testing](docs/testing.md) for setup and browser requirements.
+CI provisions disposable PostgreSQL and Redis services, applies migrations, typechecks, tests, and builds.
 
-Run `npm run build` before browser checks, which start the standalone production server on port 3001. Browser checks use installed Edge on Windows. On other systems, install Playwright Chromium with `npm exec --workspace=@supportpilot/web -- playwright install chromium`. Rendering tests cover 1440px desktop, 1280px laptop, 820px tablet, and 390px mobile. They are separate from database-backed flow verification.
+## Security and design notes
 
-## Docker and CI
+- Public registration always creates `CUSTOMER` accounts.
+- Protected API requests enforce current role/status server-side.
+- Passwords are hashed with bcrypt.
+- Refresh tokens are stored as hashes and rotated/revoked.
+- CORS uses an explicit origin allowlist.
+- AI/provider keys stay server-side.
+- AI outputs are validated before persistence.
+- AI drafts are never auto-sent.
+- Internal notes are never exposed to customers or provider prompts.
+- `.env` and private environment files are gitignored.
 
-`docker-compose.yml` runs the local database and Redis. `docker-compose.prod.yml` additionally runs web, API, and worker images. Images and CI use `npm ci` with the lockfile. The web image runs Next.js standalone output; the API image includes Prisma CLI for `npm run db:deploy`.
+Known limitations:
+- Browser sessions currently use `sessionStorage`; HTTP-only cookie auth with CSRF protection would be a stronger future design.
+- Public-auth rate limiting and full production observability are not yet implemented.
+- Notification tables exist in the schema, but notification delivery/UI is not implemented.
+- The current Render free-tier deployment runs API and worker together; dedicated process isolation is preferable for larger production workloads.
 
-CI installs dependencies, generates/validates Prisma, typechecks, deploys migrations to an isolated integration database, tests, and builds. Container execution and the remote GitHub Actions run remain unverified locally. See [deployment](docs/deployment.md).
+## Documentation
 
-## Status and limitations
+- [Architecture](docs/architecture.md)
+- [API reference](docs/api.md)
+- [OpenAPI](docs/openapi.yaml)
+- [Deployment](docs/deployment.md)
+- [Testing](docs/testing.md)
+- [AI providers](docs/ai-providers.md)
+- [Product decisions](docs/product-decisions.md)
+- [Environment verification](docs/environment-verification.md)
 
-Implemented features are listed above; local execution results and blockers are tracked in [the product verification report](docs/product-verification.md).
+## License / usage
 
-- The initial migration, demo seed and real multi-role browser/API workflow succeeded against remote development PostgreSQL. Root `.env` now targets local services; these require Docker or local PostgreSQL/Redis. See [current environment verification](docs/environment-verification.md) for results and blockers.
-- Browser tokens remain in sessionStorage, with single-flight refresh and token rotation. JavaScript can read them; XSS could steal them. HTTP-only cookie sessions with CSRF protection are a future auth migration, not partially implemented here.
-- Notification schema is reserved for future work. There is no notification center or email/SMS delivery.
-- Public registration always creates customers. A staff account editor, rate limiting, and production monitoring are not implemented.
-- SLA targets remain fixed at creation. Reopening retains the original deadlines; see [SLA and security decisions](docs/product-decisions.md).
-- A targeted PostCSS 8 override addresses the reported CSS dependency advisories. Remaining Prisma/deepmerge-ts advisories require review; see the verification report. No forced framework upgrades were applied.
-
-No production deployment, traffic, uptime, or scale claim is made. The next release work is to verify migrations and real flows, review dependency advisories, and add operational controls before a public deployment.
-
-[API reference](docs/api.md) · [OpenAPI](docs/openapi.yaml) · [Architecture](docs/architecture.md) · [Testing](docs/testing.md)
-
-## AI provider configuration
-
-Gemini and Groq use the existing BullMQ worker and validated structured outputs. Select `AI_PROVIDER=disabled|gemini|groq`; no automatic fallback is performed. Gemini defaults to the verified stable `gemini-3.5-flash-lite`. Keys remain server-side and replies require human review. See [AI setup and live verification](docs/ai-providers.md). For the existing single Render Web Service, `npm run start:combined --workspace=@supportpilot/api` starts both API and worker with the same injected environment. Separate process commands remain available.
+This repository is a portfolio and engineering demonstration project. Do not use the included development credentials or synthetic seed data as production credentials.
